@@ -8,7 +8,7 @@
   "Kill Murderers": false,
   "Broadcast spawn amount": true,
   "Broadcast murderer and scarecrow count separately": false
-  "Slow Destroy": = false,
+  "Slow Destroy": false,
   "Slow destroy time (seconds)": 0.15f
 }
 ```
