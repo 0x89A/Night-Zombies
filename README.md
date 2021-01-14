@@ -39,8 +39,6 @@
   },
   "Destroy Settings": {
     "Leave Corpse": true,
-    "Slow destroy": false,
-    "Slow Destroy Time (seconds)": 0.15
   },
   "Behaviour Settings": {
     "Count if shortname contains": false,
