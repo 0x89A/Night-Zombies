@@ -30,7 +30,7 @@
     "Murderer Population": 50.0,
     "Murderer Health": 100.0,
     "Scarecrow Population": 50.0,
-    "Scarecrow Health": 50.0,
+    "Scarecrow Health": 100.0,
     "Reverse Spawn Timings": false,
     "Chance Settings": {
       "Chance per cycle": 100.0,
