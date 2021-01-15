@@ -53,6 +53,7 @@
   }
 }
 ```
-**Chance per cycle** - Chance for zombies to spawn each time a spawn is attempted.
-**Days between spawn** - Number of in-game days until a spawn is attempted.
-**Ignored entities** - The shortnames of the entities that zombies and scarecrows will ignore and not attack.
+* **Reverse Spawn Timings** - Reverse the spawning times so zombies spawn in the day and die during the night.
+* **Chance per cycle** - Chance for zombies to spawn each time a spawn is attempted.
+* **Days between spawn** - Number of in-game days until a spawn is attempted.
+* **Ignored entities** - The shortnames of the entities that zombies and scarecrows will ignore and not attack.
