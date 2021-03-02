@@ -10,13 +10,12 @@ using Oxide.Core.Plugins;
 
 using UnityEngine;
 using Random = UnityEngine.Random;
-using Terrain = UnityEngine.Terrain;
 
 using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "2.0.1")]
+    [Info("Night Zombies", "0x89A", "2.1.0")]
     [Description("Spawns zombies at night, kills them at sunrise")]
     class NightZombies : CovalencePlugin
     {
@@ -28,7 +27,7 @@ namespace Oxide.Plugins
 
         private int daysSinceSpawn = 0;
 
-        List<BaseNetworkable> serverZombies;
+        List<BaseCombatEntity> serverZombies;
 
         [PluginReference] Plugin ConsoleFilter;
 
@@ -36,7 +35,7 @@ namespace Oxide.Plugins
 
         void OnServerInitialized()
         {
-            serverZombies = Facepunch.Pool.GetList<BaseNetworkable>();
+            serverZombies = Facepunch.Pool.GetList<BaseCombatEntity>();
 
             TOD_Sky.Instance.Components.Time.OnSunrise += ToggleZombies;
             TOD_Sky.Instance.Components.Time.OnSunset += ToggleZombies;
@@ -45,8 +44,6 @@ namespace Oxide.Plugins
             if (dataFile == null) return;
 
             daysSinceSpawn = dataFile.ReadObject<int>();
-
-            DoDestroy();
         }
 
         void Unload()
@@ -56,13 +53,9 @@ namespace Oxide.Plugins
 
             SaveData();
 
-            DoDestroy();
+            ServerMgr.Instance.StartCoroutine(DestroyZombies());
 
-            if (IsActive)
-            {
-                RunCommands(false);
-                DoDestroy();
-            }
+            if (IsActive) RunCommands(false);
 
             if (!ConsoleFilter)
             {
@@ -92,12 +85,12 @@ namespace Oxide.Plugins
         {
             if (IsZombie(networkable))
             {
-                serverZombies.Add(networkable);
                 BaseCombatEntity combat = networkable as BaseCombatEntity;
                 if (combat)
                 {
                     combat.SetHealth(combat.ShortPrefabName == "scarecrow" ? config.SpawnSettings.scarecrowHealth : config.SpawnSettings.murdererHealth);
                     combat.SendNetworkUpdateImmediate();
+                    serverZombies.Add(combat);
                 }
             }
         }
@@ -126,7 +119,7 @@ namespace Oxide.Plugins
         {
             if (TOD_Sky.Instance.IsDay) daysSinceSpawn++;
 
-            if (IsActive) timer.Once(15f, () => DoDestroy());
+            if (IsActive) timer.Once(15f, () => ServerMgr.Instance.StartCoroutine(DestroyZombies()));
             else if (!CanSpawn()) return;
 
             RunCommands(!IsActive);
@@ -134,12 +127,9 @@ namespace Oxide.Plugins
 
         private bool CanSpawn()
         {
-            if (Random.Range(0, 101) > config.SpawnSettings.Chance.chance || 
-                daysSinceSpawn < config.SpawnSettings.Chance.days ||
-                !config.SpawnSettings.reverseTimings && TOD_Sky.Instance.IsNight || 
-                config.SpawnSettings.reverseTimings && TOD_Sky.Instance.IsDay) return false;
-
-            return true;
+            if ((config.SpawnSettings.reverseTimings && TOD_Sky.Instance.IsDay || !config.SpawnSettings.reverseTimings && TOD_Sky.Instance.IsNight) && 
+                daysSinceSpawn >= config.SpawnSettings.Chance.days && Random.Range(0, 101) < config.SpawnSettings.Chance.chance) return true;
+            else return false;
         }
 
         private bool IsZombie(BaseNetworkable networkable)
@@ -169,23 +159,13 @@ namespace Oxide.Plugins
             if (on) daysSinceSpawn = 0;
         }
 
-        IEnumerator FindZombies()
-        {
-            var list = BaseNetworkable.serverEntities.entityList.Values;
-
-            for (int i = 0; i < list.Count; i++)
-                if (IsZombie(list[i]) && !serverZombies.Contains(list[i])) serverZombies.Add(list[i]);
-
-            yield break;
-        }
-
         #endregion
 
         #region -Chat Broadcast-
 
         private void ChatBroadcast() //This is just an estimate but it is fine for now
         {
-            float sqkm = (Terrain.activeTerrains[0].terrainData.size.x / 1000) * (Terrain.activeTerrains[0].terrainData.size.z / 1000);
+            float sqkm = (TerrainMeta.Size.x / 1000) * (TerrainMeta.Size.z / 1000);
 
             float murderers = Halloween.murdererpopulation * sqkm;
 
@@ -201,55 +181,30 @@ namespace Oxide.Plugins
 
         #region -Destroying Zombies-
 
-        private void DoDestroy()
+        IEnumerator DestroyZombies()
         {
-            ServerMgr.Instance.StartCoroutine(DestroyZombies((numKilled) =>
-            {
-                ServerMgr.Instance.StartCoroutine(FindZombies());
-                timer.Once(0.5f, () => 
-                {
-                    if (serverZombies.Count > 0) DoDestroy();
-                    else Puts($"Destroyed {numKilled} zombies");
-                });
-            }));
-        }
+            BaseNetworkable[] array = serverZombies.ToArray();
 
-        IEnumerator DestroyZombies(Action<int> action)
-        {
-            int x = 0;
             for (int i = 0; serverZombies.Count != 0; i++)
             {
                 yield return new WaitForSeconds(0.15f);
 
-                BaseNetworkable networkable = null;
+                BaseCombatEntity entity = null;
 
                 try
                 {
-                    networkable = serverZombies[0];
+                    entity = serverZombies[i];
                 }
                 catch
                 {
                     continue;
                 }
 
-                serverZombies.Remove(networkable);
+                if (entity == null) continue;
 
-                if (networkable == null) continue;
-
-                if (config != null && config.DestroySettings.leaveCorpse)
-                {
-                    BaseCombatEntity entity = networkable as BaseCombatEntity;
-                    entity?.Hurt(entity.MaxHealth());
-                    x++;
-                }
-                else
-                {
-                    networkable.Kill();
-                    x++;
-                }
+                if (config != null && config.DestroySettings.leaveCorpse) entity.Die();
+                else entity.Kill();
             }
-
-            action(x);
 
             yield break;
         }
