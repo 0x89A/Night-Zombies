@@ -24,7 +24,7 @@
 ## Rewrite branch (2.0.0)
 ### Configuration
 
-## To use this config you will need to install the V2.0 version of the plugin, found under the updates tab.
+**To use this config you will need to install the V2.0 version of the plugin, found under the updates tab.**
 
 ```json
 {
