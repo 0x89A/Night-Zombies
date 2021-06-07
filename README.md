@@ -1,52 +1,36 @@
-## Master branch (v0.9.0)
-### Configuration
-
-```json
-{
-  "Murderer Population": 50,
-  "Scarecrow Population": 50,
-  "Kill Murderers": false,
-  "Broadcast spawn amount": true,
-  "Broadcast murderer and scarecrow count separately": false
-  "Slow Destroy": false,
-  "Slow destroy time (seconds)": 0.15
-}
-```
-
-* **Murderer population** - Number of murderers per square kilometre.
-* **Scarecrow population** - Number of scarecrows per square kilometre.
-* **Kill murderers** - If set to true, murderes and scarecrows will die at sunrise leaving a corpse, if set to false they will be destroyed leaving no corpse.
-* **Broadcast spawn amount** - Send chat message with number of murderers/scarecrows spawned (only initial spawn).
-* **Broadcast murderer and scarecrow count separately** - Separate the number of murderers and scarecrows spawned in the chat broadcast.
-* **Slow Destroy** - Kills/destroys zombies gradually instead of all at once. Use if there are a large number of zombies on your server, causing lag when destroyed all at once.
-* **Slow destroy time (seconds)** - Time in seconds between each zombie being killed/destroyed with slow destroy.
-
-## Rewrite branch (2.0.0)
-### Configuration
-
-**To use this config you will need to install the V2.0 version of the plugin, found under the updates tab.**
+## Configuration
 
 ```json
 {
   "Spawn Settings": {
-    "Murderer Population": 50.0,
-    "Murderer Health": 100.0,
-    "Scarecrow Population": 50.0,
-    "Scarecrow Health": 100.0,
-    "Reverse Spawn Timings": false,
+    "Spawn near players": true,
+    "Minimum pop for near player spawn": 0,
+    "Min distance from player": 30.0,
+    "Max distance from player": 60.0,
+    "Spawn Time": 19.8,
+    "Destroy Time": 7.3,
+    "Zombie Settings": {
+      "Murderer Population (total amount)": 50,
+      "Murderer Health": 100.0,
+      "Scarecrow Population (total amount)": 50,
+      "Scarecrow Health": 200.0
+    },
     "Chance Settings": {
       "Chance per cycle": 100.0,
       "Days betewen spawn": 0
     }
   },
   "Destroy Settings": {
-    "Leave Corpse": true,
+    "Leave Corpse, when destroyed (can cause more lag if true)": true,
+    "Leave Corpse, when killed by player": true
   },
   "Behaviour Settings": {
-    "Count if shortname contains": false,
-    "Ignored entities": [
-      "scientist",
-      "scientistjunkpile",
+    "Attack sleeping players": false,
+    "Zombies attacked by outpost sentries": true,
+    "Ignore Human NPCs": true,
+    "Ignored entities (full entity shortname)": [
+      "scientistjunkpile.prefab",
+      "scarecrow.prefab"
     ]
   },
   "Broadcast Settings": {
@@ -55,7 +39,28 @@
   }
 }
 ```
-* **Reverse Spawn Timings** - Reverse the spawning times so zombies spawn in the day and die during the night.
-* **Chance per cycle** - Chance for zombies to spawn each time a spawn is attempted.
-* **Days between spawn** - Number of in-game days until a spawn is attempted.
-* **Ignored entities** - The shortnames of the entities that zombies and scarecrows will ignore and not attack.
+
+### Spawn Settings
+
+* **Spawn near players** - Do zombies spawn near to players (randomly chosen), if false zombies will spawn randomly around the map.
+* **Minimum pop for near player spawn** - The minimum server population for zombies to spawn near players.
+* **Min distance from player** - When spawning near players, this is the minimum distance that zombies are allowed to spawn from the player.
+* **Max distance from player** - When spawning near players, this is the maximum distance that zombies are allowed to spawn from the player.
+* **Spawn Time** - The in-game time at which zombies will appear.
+* **Destroy Time** - The in-game time at which zombies will disappear.
+
+#### Chance Settings
+
+* **Chance per cycle** - Percentage chance that zombies will spawn each spawn attempt.
+* **Days between spawn** - The number of days between spawn attempts.
+
+### Destroy Settings
+
+* **Leave Corpse, when destroyed** - Are corpses left when zombies disappear (can affect performance when set to true).
+* **Leave Corpse, when killed by player** - Are corpses left when zombies are killed by players.
+
+### Behaviour Settings
+
+* **Zombies attacked by outpost sentries** - Are zombies attacked by the sentries at safezones.
+* **Ignore Human NPCs** - Do zombies ignore npc player characters.
+* **Ignored entities (full entity shortname)** - Zombies will not target entities in this list, must be the full short prefab name.
