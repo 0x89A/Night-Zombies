@@ -64,3 +64,10 @@
 * **Zombies attacked by outpost sentries** - Are zombies attacked by the sentries at safezones.
 * **Ignore Human NPCs** - Do zombies ignore npc player characters.
 * **Ignored entities (full entity shortname)** - Zombies will not target entities in this list, must be the full short prefab name.
+
+## Notes
+
+The 0.9.0 and 2.0 versions are still available to download if you want them.
+
+* You can find v0.9.0 and its documentation [here](https://github.com/0x89A/Night-Zombies/blob/deprecated-v0.9.0/README.md)
+* You can find v2.0 and its documentation [here](https://github.com/0x89A/Night-Zombies/tree/deprecated-v2.0)
