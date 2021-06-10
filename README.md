@@ -9,6 +9,7 @@
     "Max distance from player": 60.0,
     "Spawn Time": 19.8,
     "Destroy Time": 7.3,
+    "Spawn delay": 0.35,
     "Zombie Settings": {
       "Murderer Population (total amount)": 50,
       "Murderer Health": 100.0,
@@ -48,6 +49,7 @@
 * **Max distance from player** - When spawning near players, this is the maximum distance that zombies are allowed to spawn from the player.
 * **Spawn Time** - The in-game time at which zombies will appear.
 * **Destroy Time** - The in-game time at which zombies will disappear.
+* **Spawn delay** - The time in seconds between zombie spawns, increasing this value may help with lag or crashes when spawning zombies.
 
 #### Chance Settings
 
