@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.0")]
+    [Info("Night Zombies", "0x89A", "3.0.1")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -54,11 +54,15 @@ namespace Oxide.Plugins
         void OnServerInitialized()
         {
             TOD_Sky.Instance.Components.Time.OnMinute += spawnController.TimeTick;
+            TOD_Sky.Instance.Components.Time.OnDay += () => { spawnController.daysSinceLastSpawn++; };
         }
 
         void Unload()
         {
             TOD_Sky.Instance.Components.Time.OnMinute -= spawnController.TimeTick;
+            TOD_Sky.Instance.Components.Time.OnDay -= () => { spawnController.daysSinceLastSpawn++; };
+
+            dataFile.WriteObject(spawnController.daysSinceLastSpawn);
 
             spawnController?.Shutdown();
         }
@@ -247,11 +251,14 @@ namespace Oxide.Plugins
                 new Tuple<ItemDefinition, ulong>(FindDefinition(-1549739227), 0)
             };
 
-            private int daysSinceLastSpawn = 0, murdererCount, scarecrowCount, minPlayerPop;
-            private float murdererHealth, scarecrowHealth, chance, days, minDist, maxDist, spawnTime, destroyTime;
-            private bool leaveCorpse, doBroadcast, broadcastSeparate, nearPlayers;
+            private Configuration.SpawnSettings spawnConfig;
+            private Configuration.SpawnSettings.ZombieSettings zombiesConfig;
+
+            private float spawnTime, destroyTime;
             private bool isSpawnTime => spawnTime > destroyTime ? Env.time >= spawnTime || Env.time < destroyTime : Env.time <= spawnTime || Env.time > destroyTime;
             private bool isDestroyTime => spawnTime > destroyTime ? Env.time >= destroyTime && Env.time < spawnTime : Env.time <= destroyTime && Env.time > spawnTime;
+
+            public int daysSinceLastSpawn;
 
             public Timer murdererTimer;
             public Timer scarecrowTimer;
@@ -265,60 +272,44 @@ namespace Oxide.Plugins
                 this.instance = instance;
 
                 this.daysSinceLastSpawn = daysSinceLastSpawn;
-                chance = config.Spawn.Chance.chance;
-                days = config.Spawn.Chance.days;
-                leaveCorpse = config.Destroy.leaveCorpse;
-
-                murdererCount = config.Spawn.Zombies.murdererPoluation;
-                scarecrowCount = config.Spawn.Zombies.scarecrowPopulation;
-                murdererHealth = config.Spawn.Zombies.murdererHealth;
-                scarecrowHealth = config.Spawn.Zombies.scarecrowHealth;
-                minPlayerPop = config.Spawn.spawnNearPlayersPop;
-                nearPlayers = config.Spawn.spawnNearPlayers;
-
-                maxDist = config.Spawn.maxDistance;
-                minDist = config.Spawn.minDistance;
 
                 spawnTime = config.Spawn.spawnTime;
                 destroyTime = config.Spawn.destroyTime;
 
-                doBroadcast = config.Broadcast.doBroadcast;
-                broadcastSeparate = config.Broadcast.broadcastSeparate;
+                spawnConfig = config.Spawn;
+                zombiesConfig = config.Spawn.Zombies;
             }
 
-            public IEnumerator SpawnZombies()
+            public void SpawnZombies()
             {
-                if (murdererCount > 0)
+                if (zombiesConfig.murdererPoluation > 0)
                 {
-                    murdererTimer = instance.timer.Repeat(0.15f, murdererCount, () =>
+                    murdererTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.murdererPoluation, () =>
                     {
-                        Spawn(murdererPrefab, murdererHealth, true);
+                        Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
                     });
                 }
                 
-                if (scarecrowCount > 0)
+                if (zombiesConfig.scarecrowPopulation > 0)
                 {
-                    scarecrowTimer = instance.timer.Repeat(0.15f, scarecrowCount, () =>
+                    scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation, () =>
                     {
-                        Spawn(scarecrowPrefab, scarecrowHealth, false);
+                        Spawn(scarecrowPrefab, zombiesConfig.scarecrowHealth, false);
                     });
                 }
 
-                if (!spawned && doBroadcast)
+                if (!spawned && instance.config.Broadcast.doBroadcast)
                 {
-                    if (broadcastSeparate) Broadcast("ChatBroadcastSeparate", murdererCount, scarecrowCount);
-                    else Broadcast("ChatBroadcast", murdererCount + scarecrowCount);
+                    if (instance.config.Broadcast.broadcastSeparate) Broadcast("ChatBroadcastSeparate", zombiesConfig.scarecrowPopulation, zombiesConfig.murdererPoluation);
+                    else Broadcast("ChatBroadcast", zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation);
                 }
 
+                daysSinceLastSpawn = 0;
                 spawned = true;
-
-                yield return null;
             }
 
             public IEnumerator RemoveZombies(bool configOverride = false)
             {
-                ServerMgr.Instance.StopCoroutine(SpawnZombies());
-
                 BaseCombatEntity[] array = zombies.ToArray();
 
                 for (int i = 0; i < zombies.Count; i++)
@@ -326,7 +317,7 @@ namespace Oxide.Plugins
                     BaseCombatEntity entity = array[i];
                     if (entity == null) continue;
 
-                    if (leaveCorpse && !configOverride) entity.DieInstantly();
+                    if (instance.config.Destroy.leaveCorpse && !configOverride) entity.DieInstantly();
                     else entity.AdminKill();
                 }
 
@@ -342,11 +333,11 @@ namespace Oxide.Plugins
                 if (!spawned && CanSpawn())
                 {
                     ServerMgr.Instance.StopCoroutine(RemoveZombies());
-                    ServerMgr.Instance.StartCoroutine(SpawnZombies());
+                    SpawnZombies();
                 }
                 else if (isDestroyTime)
                 {
-                    ServerMgr.Instance.StopCoroutine(SpawnZombies());
+                    StopTimers();
                     ServerMgr.Instance.StartCoroutine(RemoveZombies());
                 }
             }
@@ -356,7 +347,7 @@ namespace Oxide.Plugins
             private BaseCombatEntity Spawn(string prefab, float health, bool murderer)
             {
                 BasePlayer player;
-                Vector3 position = nearPlayers && (minPlayerPop <= 0 || BasePlayer.activePlayerList.Count >= minPlayerPop) && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
+                Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= spawnConfig.spawnNearPlayersPop && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
 
                 BasePlayer entity = GameManager.server.CreateEntity(prefab, position, Quaternion.identity, false) as BasePlayer;
 
@@ -413,15 +404,14 @@ namespace Oxide.Plugins
                 Vector3 playerPos = player.transform.position;
                 Vector3 position = default(Vector3);
 
+                float maxDist = spawnConfig.maxDistance;
+
                 for (int i = 0; i < 2; i++)
                 {
-                    float x = Random.Range(playerPos.x - maxDist, playerPos.x + maxDist);
-                    float z = Random.Range(playerPos.z - maxDist, playerPos.z + maxDist);
-
-                    position = new Vector3(x, 0, z);
+                    position = new Vector3(Random.Range(playerPos.x - maxDist, playerPos.x + maxDist), 0, Random.Range(playerPos.z - maxDist, playerPos.z + maxDist));
                     position.y = TerrainMeta.HeightMap.GetHeight(position);
 
-                    if (IsInObject(position) || IsInOcean(position) || Vector3.Distance(playerPos, position) < minDist) i = 0;
+                    if (IsInObject(position) || IsInOcean(position) || Vector3.Distance(playerPos, position) < spawnConfig.minDistance) i = 0;
                     else break;
                 }
 
@@ -430,7 +420,7 @@ namespace Oxide.Plugins
 
             private bool CanSpawn()
             {
-                return daysSinceLastSpawn >= days && Random.Range(0f, 100f) < chance && isSpawnTime;
+                return daysSinceLastSpawn >= spawnConfig.Chance.days && Random.Range(0f, 100f) < spawnConfig.Chance.chance && isSpawnTime;
             }
 
             private bool IsInObject(Vector3 position)
@@ -445,25 +435,31 @@ namespace Oxide.Plugins
                 return WaterLevel.GetWaterDepth(position) > 0.25f;
             }
 
-            public void SetMurdererCount(int count) => murdererCount = count;
-
-            public void SetScarecrowCount(int count) => scarecrowCount = count;
-
             private void Broadcast(string key, params object[] values)
             {
-                instance.Server.Broadcast(string.Format(instance.lang.GetMessage(key, instance), values));
+                try
+                {
+                    instance.Server.Broadcast(string.Format(instance.lang.GetMessage(key, instance), values));
+                }
+                catch
+                {
+                    instance.Server.Broadcast(values.Length == 1 ? instance.lang.GetMessage(key, instance).Replace("{0}", (string)values[0]) : instance.lang.GetMessage(key, instance).Replace("{0}", (string)values[0]).Replace("{1}", (string)values[1]));
+                }
             }
 
             private static ItemDefinition FindDefinition(int id) => ItemManager.FindItemDefinition(id);
 
             #endregion
 
-            public void Shutdown()
+            private void StopTimers()
             {
-                ServerMgr.Instance.StopCoroutine(SpawnZombies());
-
                 murdererTimer?.Destroy();
                 scarecrowTimer?.Destroy();
+            }
+
+            public void Shutdown()
+            {
+                StopTimers();
 
                 ServerMgr.Instance.StartCoroutine(RemoveZombies(true));
             }
@@ -504,6 +500,9 @@ namespace Oxide.Plugins
 
                 [JsonProperty("Destroy Time")]
                 public float destroyTime = 7.3f;
+
+                [JsonProperty("Spawn delay (seconds)")]
+                public float spawnDelay = 0.35f;
 
                 [JsonProperty("Zombie Settings")]
                 public ZombieSettings Zombies = new ZombieSettings();
