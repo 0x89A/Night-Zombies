@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.1")]
+    [Info("Night Zombies", "0x89A", "3.0.2")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -284,17 +284,25 @@ namespace Oxide.Plugins
             {
                 if (zombiesConfig.murdererPoluation > 0)
                 {
+                    murdererTimer?.Destroy();
+
                     murdererTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.murdererPoluation, () =>
                     {
                         Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
+
+                        if (zombies.Count > zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation) murdererTimer.Destroy();
                     });
                 }
                 
                 if (zombiesConfig.scarecrowPopulation > 0)
                 {
+                    scarecrowTimer.Destroy();
+
                     scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation, () =>
                     {
                         Spawn(scarecrowPrefab, zombiesConfig.scarecrowHealth, false);
+
+                        if (zombies.Count > zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation) murdererTimer.Destroy();
                     });
                 }
 
@@ -308,7 +316,7 @@ namespace Oxide.Plugins
                 spawned = true;
             }
 
-            public IEnumerator RemoveZombies(bool configOverride = false)
+            public IEnumerator RemoveZombies(bool configOverride = false, Action complete = null)
             {
                 BaseCombatEntity[] array = zombies.ToArray();
 
@@ -321,20 +329,17 @@ namespace Oxide.Plugins
                     else entity.AdminKill();
                 }
 
+                zombies.Clear();
                 spawned = false;
 
-                zombies.Clear();
+                complete?.Invoke();
 
                 yield break;
             }
 
             public void TimeTick()
             {
-                if (!spawned && CanSpawn())
-                {
-                    ServerMgr.Instance.StopCoroutine(RemoveZombies());
-                    SpawnZombies();
-                }
+                if (!spawned && CanSpawn()) ServerMgr.Instance.StopCoroutine(RemoveZombies(false, SpawnZombies));
                 else if (isDestroyTime)
                 {
                     StopTimers();
