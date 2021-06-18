@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.2")]
+    [Info("Night Zombies", "0x89A", "3.0.3")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -290,7 +290,10 @@ namespace Oxide.Plugins
                     {
                         Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
 
-                        if (zombies.Count > zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation) murdererTimer.Destroy();
+                        if (zombies.Count > zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation)
+                        {
+                            murdererTimer.Destroy();
+                        }
                     });
                 }
                 
@@ -325,8 +328,9 @@ namespace Oxide.Plugins
                     BaseCombatEntity entity = array[i];
                     if (entity == null) continue;
 
-                    if (instance.config.Destroy.leaveCorpse && !configOverride) entity.DieInstantly();
-                    else entity.AdminKill();
+                    if (instance.config.Destroy.leaveCorpse && !configOverride) instance.CreateCorpse(entity as BasePlayer);
+
+                    entity.AdminKill();
                 }
 
                 zombies.Clear();
@@ -339,8 +343,8 @@ namespace Oxide.Plugins
 
             public void TimeTick()
             {
-                if (!spawned && CanSpawn()) ServerMgr.Instance.StopCoroutine(RemoveZombies(false, SpawnZombies));
-                else if (isDestroyTime)
+                if (!spawned && CanSpawn()) ServerMgr.Instance.StartCoroutine(RemoveZombies(false, SpawnZombies));
+                else if (spawned && isDestroyTime)
                 {
                     StopTimers();
                     ServerMgr.Instance.StartCoroutine(RemoveZombies());
