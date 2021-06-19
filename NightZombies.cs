@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.4")]
+    [Info("Night Zombies", "0x89A", "3.0.5")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -282,6 +282,8 @@ namespace Oxide.Plugins
 
             public void SpawnZombies()
             {
+                ServerMgr.Instance.StopCoroutine(RemoveZombies());
+
                 if (zombiesConfig.murdererPoluation > 0)
                 {
                     murdererTimer?.Destroy();
@@ -297,7 +299,7 @@ namespace Oxide.Plugins
                 
                 if (zombiesConfig.scarecrowPopulation > 0)
                 {
-                    scarecrowTimer.Destroy();
+                    scarecrowTimer?.Destroy();
 
                     scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation, () =>
                     {
