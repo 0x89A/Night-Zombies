@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.5")]
+    [Info("Night Zombies", "0x89A", "3.0.6")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -416,12 +416,24 @@ namespace Oxide.Plugins
 
                 float maxDist = spawnConfig.maxDistance;
 
+                int attempts = 0;
+
                 for (int i = 0; i < 2; i++)
                 {
+                    if (attempts >= 4)
+                    {
+                        position = GetRandomPosition();
+                        break;
+                    }
+
                     position = new Vector3(Random.Range(playerPos.x - maxDist, playerPos.x + maxDist), 0, Random.Range(playerPos.z - maxDist, playerPos.z + maxDist));
                     position.y = TerrainMeta.HeightMap.GetHeight(position);
 
-                    if (IsInObject(position) || IsInOcean(position) || Vector3.Distance(playerPos, position) < spawnConfig.minDistance) i = 0;
+                    if (IsInObject(position) || IsInOcean(position) || Vector3.Distance(playerPos, position) < spawnConfig.minDistance)
+                    {
+                        i = 0;
+                        attempts++;
+                    }
                     else break;
                 }
 
