@@ -18,14 +18,14 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.6")]
+    [Info("Night Zombies", "0x89A", "3.0.75")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
         private Configuration config;
         private DynamicConfigFile dataFile;
 
-        [PluginReference] Plugin ClothedMurderers, PlaguedMurderers;
+        [PluginReference] Plugin ClothedMurderers, PlaguedMurderers, GatherRewards;
 
         private SpawnController spawnController;
 
@@ -97,6 +97,11 @@ namespace Oxide.Plugins
 
                     if (def.DeathEffect.isValid) 
                         Effect.server.Run(def.DeathEffect.resourcePath, entity.transform.position);
+                }
+
+                if (GatherRewards != null && GatherRewards.IsLoaded)
+                {
+                    GatherRewards.CallHook("OnEntityDeath", entity, info);
                 }
 
                 Respawn(entity);
@@ -267,6 +272,8 @@ namespace Oxide.Plugins
 
             private List<BaseCombatEntity> zombies = new List<BaseCombatEntity>();
 
+            private int scarecrows, murderers;
+
             public SpawnController(int daysSinceLastSpawn, Configuration config, NightZombies instance)
             {
                 this.instance = instance;
@@ -284,36 +291,38 @@ namespace Oxide.Plugins
             {
                 ServerMgr.Instance.StopCoroutine(RemoveZombies());
 
-                if (zombiesConfig.murdererPoluation > 0)
+                if (zombiesConfig.murdererPopuluation > 0 && murderers < zombiesConfig.murdererPopuluation)
                 {
                     murdererTimer?.Destroy();
 
-                    murdererTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.murdererPoluation, () =>
+                    murdererTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.murdererPopuluation - murderers, () =>
                     {
-                        Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
-
-                        if (zombies.Count > zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation)
-                            murdererTimer?.Destroy();
+                        if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
+                        {
+                            Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
+                            murderers++;
+                        }
                     });
                 }
-                
-                if (zombiesConfig.scarecrowPopulation > 0)
+
+                if (zombiesConfig.scarecrowPopulation > 0 && scarecrows < zombiesConfig.scarecrowPopulation)
                 {
                     scarecrowTimer?.Destroy();
 
-                    scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation, () =>
+                    scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation - scarecrows, () =>
                     {
-                        Spawn(scarecrowPrefab, zombiesConfig.scarecrowHealth, false);
-
-                        if (zombies.Count > zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation) 
-                            scarecrowTimer?.Destroy();
+                        if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
+                        {
+                            Spawn(scarecrowPrefab, zombiesConfig.scarecrowHealth, false);
+                            scarecrows++;
+                        }
                     });
                 }
 
                 if (!spawned && instance.config.Broadcast.doBroadcast)
                 {
-                    if (instance.config.Broadcast.broadcastSeparate) Broadcast("ChatBroadcastSeparate", zombiesConfig.scarecrowPopulation, zombiesConfig.murdererPoluation);
-                    else Broadcast("ChatBroadcast", zombiesConfig.murdererPoluation + zombiesConfig.scarecrowPopulation);
+                    if (instance.config.Broadcast.broadcastSeparate) Broadcast("ChatBroadcastSeparate", zombiesConfig.scarecrowPopulation, zombiesConfig.murdererPopuluation);
+                    else Broadcast("ChatBroadcast", zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation);
                 }
 
                 daysSinceLastSpawn = 0;
@@ -335,6 +344,8 @@ namespace Oxide.Plugins
                 }
 
                 zombies.Clear();
+                murderers = 0;
+                scarecrows = 0;
                 spawned = false;
 
                 complete?.Invoke();
@@ -532,7 +543,7 @@ namespace Oxide.Plugins
                 public class ZombieSettings
                 {
                     [JsonProperty("Murderer Population (total amount)")]
-                    public int murdererPoluation = 50;
+                    public int murdererPopuluation = 50;
 
                     [JsonProperty("Murderer Health")]
                     public float murdererHealth = 100f;
@@ -560,7 +571,7 @@ namespace Oxide.Plugins
             public class DestroySettings
             {
                 [JsonProperty("Leave Corpse, when destroyed")]
-                public bool leaveCorpse = true;
+                public bool leaveCorpse = false;
 
                 [JsonProperty("Leave Corpse, when killed by player")]
                 public bool leaveCorpseKilled = true;
