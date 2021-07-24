@@ -18,14 +18,14 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.0.75")]
+    [Info("Night Zombies", "0x89A", "3.1.0")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
         private Configuration config;
         private DynamicConfigFile dataFile;
 
-        [PluginReference] Plugin ClothedMurderers, PlaguedMurderers, GatherRewards;
+        [PluginReference] Plugin ClothedMurderers, PlaguedMurderers;
 
         private SpawnController spawnController;
 
@@ -54,13 +54,13 @@ namespace Oxide.Plugins
         void OnServerInitialized()
         {
             TOD_Sky.Instance.Components.Time.OnMinute += spawnController.TimeTick;
-            TOD_Sky.Instance.Components.Time.OnDay += () => { spawnController.daysSinceLastSpawn++; };
+            TOD_Sky.Instance.Components.Time.OnDay += () => spawnController.daysSinceLastSpawn++;
         }
 
         void Unload()
         {
             TOD_Sky.Instance.Components.Time.OnMinute -= spawnController.TimeTick;
-            TOD_Sky.Instance.Components.Time.OnDay -= () => { spawnController.daysSinceLastSpawn++; };
+            TOD_Sky.Instance.Components.Time.OnDay -= () => spawnController.daysSinceLastSpawn++;
 
             dataFile.WriteObject(spawnController.daysSinceLastSpawn);
 
@@ -99,10 +99,7 @@ namespace Oxide.Plugins
                         Effect.server.Run(def.DeathEffect.resourcePath, entity.transform.position);
                 }
 
-                if (GatherRewards != null && GatherRewards.IsLoaded)
-                {
-                    GatherRewards.CallHook("OnEntityDeath", entity, info);
-                }
+                Interface.CallHook("OnEntityDeath", entity, info);
 
                 Respawn(entity);
                 return true;
@@ -117,11 +114,24 @@ namespace Oxide.Plugins
             {
                 if (entity.DeathEffect.isValid) Effect.server.Run(entity.DeathEffect.resourcePath, entity.transform.position);
 
+                Interface.CallHook("OnEntityDeath", entity, info);
+
                 Respawn(entity);
                 return true;
             }
 
             return null;
+        }
+
+        private void OnEntitySpawned(DroppedItemContainer container)
+        {
+            if (config.Destroy.halfBodybagDespawn && (container.lootPanelName == "scarecrow" || container.lootPanelName == "murderer"))
+            {
+                string methodName = nameof(DroppedItemContainer.RemoveMe);
+
+                container.CancelInvoke(methodName);
+                container.Invoke(methodName, container.CalculateRemovalTime() / 2);
+            }
         }
 
         #endregion -Oxide Hooks-
@@ -178,7 +188,7 @@ namespace Oxide.Plugins
                 zombie.inventory.containerWear,
                 zombie.inventory.containerBelt
             };
-
+            
             if (corpse)
             {
                 corpse.containers = new ItemContainer[3];
@@ -272,8 +282,6 @@ namespace Oxide.Plugins
 
             private List<BaseCombatEntity> zombies = new List<BaseCombatEntity>();
 
-            private int scarecrows, murderers;
-
             public SpawnController(int daysSinceLastSpawn, Configuration config, NightZombies instance)
             {
                 this.instance = instance;
@@ -289,32 +297,32 @@ namespace Oxide.Plugins
 
             public void SpawnZombies()
             {
+                if (spawned) return;
+
                 ServerMgr.Instance.StopCoroutine(RemoveZombies());
 
-                if (zombiesConfig.murdererPopuluation > 0 && murderers < zombiesConfig.murdererPopuluation)
+                if (zombiesConfig.murdererPopuluation > 0)
                 {
                     murdererTimer?.Destroy();
 
-                    murdererTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.murdererPopuluation - murderers, () =>
+                    murdererTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.murdererPopuluation, () =>
                     {
                         if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
                         {
                             Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
-                            murderers++;
                         }
                     });
                 }
 
-                if (zombiesConfig.scarecrowPopulation > 0 && scarecrows < zombiesConfig.scarecrowPopulation)
+                if (zombiesConfig.scarecrowPopulation > 0)
                 {
                     scarecrowTimer?.Destroy();
 
-                    scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation - scarecrows, () =>
+                    scarecrowTimer = instance.timer.Repeat(spawnConfig.spawnDelay, zombiesConfig.scarecrowPopulation, () =>
                     {
                         if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
                         {
                             Spawn(scarecrowPrefab, zombiesConfig.scarecrowHealth, false);
-                            scarecrows++;
                         }
                     });
                 }
@@ -344,8 +352,6 @@ namespace Oxide.Plugins
                 }
 
                 zombies.Clear();
-                murderers = 0;
-                scarecrows = 0;
                 spawned = false;
 
                 complete?.Invoke();
@@ -365,10 +371,12 @@ namespace Oxide.Plugins
 
             #region -Util-
 
-            private BaseCombatEntity Spawn(string prefab, float health, bool murderer)
+            private void Spawn(string prefab, float health, bool murderer)
             {
+                if (zombies.Count >= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation) return;
+
                 BasePlayer player;
-                Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= spawnConfig.spawnNearPlayersPop && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
+                Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= 20 && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
 
                 BasePlayer entity = GameManager.server.CreateEntity(prefab, position, Quaternion.identity, false) as BasePlayer;
 
@@ -386,11 +394,7 @@ namespace Oxide.Plugins
                     }
 
                     zombies.Add(entity);
-
-                    return entity;
                 }
-
-                return null;
             }
 
             public bool GetPlayer(out BasePlayer player)
@@ -517,16 +521,13 @@ namespace Oxide.Plugins
             public class SpawnSettings
             {
                 [JsonProperty("Spawn near players")]
-                public bool spawnNearPlayers = true;
-
-                [JsonProperty("Minimum pop for near player spawn")]
-                public int spawnNearPlayersPop = 0;
+                public bool spawnNearPlayers = false;
 
                 [JsonProperty("Min distance from player")]
-                public float minDistance = 30;
+                public float minDistance = 40;
 
                 [JsonProperty("Max distance from player")]
-                public float maxDistance = 60f;
+                public float maxDistance = 80f;
 
                 [JsonProperty("Spawn Time")]
                 public float spawnTime = 19.8f;
@@ -535,7 +536,7 @@ namespace Oxide.Plugins
                 public float destroyTime = 7.3f;
 
                 [JsonProperty("Spawn delay (seconds)")]
-                public float spawnDelay = 0.35f;
+                public float spawnDelay = 0.4f;
 
                 [JsonProperty("Zombie Settings")]
                 public ZombieSettings Zombies = new ZombieSettings();
@@ -575,6 +576,9 @@ namespace Oxide.Plugins
 
                 [JsonProperty("Leave Corpse, when killed by player")]
                 public bool leaveCorpseKilled = true;
+
+                [JsonProperty("Half bodybag despawn time")]
+                public bool halfBodybagDespawn = true;
             }
 
             public class BehaviourSettings
