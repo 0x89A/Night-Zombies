@@ -3,13 +3,11 @@
 ```json
 {
   "Spawn Settings": {
-    "Spawn near players": true,
-    "Minimum pop for near player spawn": 0,
+    "Spawn near players": false,
     "Min distance from player": 30.0,
     "Max distance from player": 60.0,
     "Spawn Time": 19.8,
     "Destroy Time": 7.3,
-    "Spawn delay": 0.35,
     "Zombie Settings": {
       "Murderer Population (total amount)": 50,
       "Murderer Health": 100.0,
@@ -22,7 +20,7 @@
     }
   },
   "Destroy Settings": {
-    "Leave Corpse, when destroyed (can cause more lag if true)": true,
+    "Leave Corpse, when destroyed (can cause more lag if true)": false,
     "Leave Corpse, when killed by player": true
   },
   "Behaviour Settings": {
@@ -44,12 +42,10 @@
 ### Spawn Settings
 
 * **Spawn near players** - Do zombies spawn near to players (randomly chosen), if false zombies will spawn randomly around the map.
-* **Minimum pop for near player spawn** - The minimum server population for zombies to spawn near players.
 * **Min distance from player** - When spawning near players, this is the minimum distance that zombies are allowed to spawn from the player.
 * **Max distance from player** - When spawning near players, this is the maximum distance that zombies are allowed to spawn from the player.
 * **Spawn Time** - The in-game time at which zombies will appear.
 * **Destroy Time** - The in-game time at which zombies will disappear.
-* **Spawn delay** - The time in seconds between zombie spawns, increasing this value may help with lag or crashes when spawning zombies.
 
 #### Chance Settings
 
