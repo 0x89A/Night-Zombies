@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.05")]
+    [Info("Night Zombies", "0x89A", "3.1.1")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -53,8 +53,11 @@ namespace Oxide.Plugins
         //Start time check
         void OnServerInitialized()
         {
-            TOD_Sky.Instance.Components.Time.OnMinute += spawnController.TimeTick;
-            TOD_Sky.Instance.Components.Time.OnDay += () => spawnController.daysSinceLastSpawn++;
+            timer.Once(5f, () =>
+            {
+                TOD_Sky.Instance.Components.Time.OnMinute += spawnController.TimeTick;
+                TOD_Sky.Instance.Components.Time.OnDay += () => spawnController.daysSinceLastSpawn++;
+            });
         }
 
         void Unload()
@@ -163,8 +166,17 @@ namespace Oxide.Plugins
             entity.gameObject.SetActive(false);
 
             BasePlayer player;
-            entity.transform.position = config.Spawn.spawnNearPlayers && spawnController.GetPlayer(out player) ? spawnController.GetRandomPositionAroundPlayer(player) : spawnController.GetRandomPosition();
+
+            entity.Teleport(config.Spawn.spawnNearPlayers && spawnController.GetPlayer(out player) ? spawnController.GetRandomPositionAroundPlayer(player) : spawnController.GetRandomPosition());
             entity.gameObject.SetActive(true);
+
+            NextTick(() =>
+            {
+                if (entity != null && entity.transform.position.y < TerrainMeta.HeightMap.GetHeight(entity.transform.position))
+                {
+                    entity.AdminKill();
+                }
+            });
 
             entity.Heal(entity is NPCMurderer ? config.Spawn.Zombies.murdererHealth : config.Spawn.Zombies.scarecrowHealth);
             entity.SendNetworkUpdateImmediate();
@@ -218,6 +230,14 @@ namespace Oxide.Plugins
                 corpse.Spawn();
 
                 SpawnLoot(zombie, corpse);
+
+                if (config.Destroy.quickDestroyCorpse)
+                {
+                    timer.Once(10f, () =>
+                    {
+                        if (corpse != null) corpse.Die();
+                    });
+                }
             }
         }
 
@@ -304,8 +324,7 @@ namespace Oxide.Plugins
                 if (zombiesConfig.murdererPopuluation > 0)
                 {
                     murdererTimer?.Destroy();
-
-                    murdererTimer = instance.timer.Repeat(1f, zombiesConfig.murdererPopuluation, () =>
+                    murdererTimer = instance.timer.Repeat(0.5f, zombiesConfig.murdererPopuluation, () =>
                     {
                         if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
                         {
@@ -317,8 +336,7 @@ namespace Oxide.Plugins
                 if (zombiesConfig.scarecrowPopulation > 0)
                 {
                     scarecrowTimer?.Destroy();
-
-                    scarecrowTimer = instance.timer.Repeat(1f, zombiesConfig.scarecrowPopulation, () =>
+                    scarecrowTimer = instance.timer.Repeat(0.5f, zombiesConfig.scarecrowPopulation, () =>
                     {
                         if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
                         {
@@ -392,8 +410,6 @@ namespace Oxide.Plugins
                         foreach (Tuple<ItemDefinition, ulong> tuple in murdererItems)
                             entity.inventory.containerWear.AddItem(tuple.Item1, 1, tuple.Item2);
                     }
-
-                    zombies.Add(entity);
                 }
             }
 
@@ -415,9 +431,9 @@ namespace Oxide.Plugins
                     z = Random.Range(-TerrainMeta.Size.z / 2, TerrainMeta.Size.z / 2);
                     y = TerrainMeta.HeightMap.GetHeight(new Vector3(x, 0, z));
 
-                    position = new Vector3(x, y, z);
+                    position = new Vector3(x, y + 0.5f, z);
 
-                    if (IsInObject(position) || IsInOcean(position)) i = 0;
+                    if (AntiHack.TestInsideTerrain(position) || IsInObject(position) || IsInOcean(position)) i = 0;
                     else break;
                 }
 
@@ -444,7 +460,7 @@ namespace Oxide.Plugins
                     position = new Vector3(Random.Range(playerPos.x - maxDist, playerPos.x + maxDist), 0, Random.Range(playerPos.z - maxDist, playerPos.z + maxDist));
                     position.y = TerrainMeta.HeightMap.GetHeight(position);
 
-                    if (IsInObject(position) || IsInOcean(position) || Vector3.Distance(playerPos, position) < spawnConfig.minDistance)
+                    if (AntiHack.TestInsideTerrain(position) || IsInObject(position) || IsInOcean(position) || Vector3.Distance(playerPos, position) < spawnConfig.minDistance)
                     {
                         i = 0;
                         attempts++;
@@ -576,6 +592,9 @@ namespace Oxide.Plugins
 
                 [JsonProperty("Half bodybag despawn time")]
                 public bool halfBodybagDespawn = true;
+
+                [JsonProperty("Quick destroy corpses")]
+                public bool quickDestroyCorpse = true;
             }
 
             public class BehaviourSettings
