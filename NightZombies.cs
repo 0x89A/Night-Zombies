@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.1")]
+    [Info("Night Zombies", "0x89A", "3.1.2")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -394,7 +394,7 @@ namespace Oxide.Plugins
                 if (zombies.Count >= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation) return;
 
                 BasePlayer player;
-                Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= 20 && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
+                Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= spawnConfig.minNearPlayers && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
 
                 BasePlayer entity = GameManager.server.CreateEntity(prefab, position, Quaternion.identity, false) as BasePlayer;
 
@@ -538,6 +538,9 @@ namespace Oxide.Plugins
             {
                 [JsonProperty("Spawn near players")]
                 public bool spawnNearPlayers = false;
+
+                [JsonProperty("Min pop for near player spawn")]
+                public int minNearPlayers = 10;
 
                 [JsonProperty("Min distance from player")]
                 public float minDistance = 40;
