@@ -4,6 +4,7 @@
 {
   "Spawn Settings": {
     "Spawn near players": false,
+    "Min pop for near player spawn": 10,
     "Min distance from player": 30.0,
     "Max distance from player": 60.0,
     "Spawn Time": 19.8,
@@ -21,7 +22,9 @@
   },
   "Destroy Settings": {
     "Leave Corpse, when destroyed (can cause more lag if true)": false,
-    "Leave Corpse, when killed by player": true
+    "Leave Corpse, when killed by player": true,
+    "Half body bag despawn time": true,
+    "Quick destroy corpses": true
   },
   "Behaviour Settings": {
     "Attack sleeping players": false,
@@ -42,6 +45,7 @@
 ### Spawn Settings
 
 * **Spawn near players** - Do zombies spawn near to players (randomly chosen), if false zombies will spawn randomly around the map.
+* **Min pop for near player spawn** - The minimum number of players on the server for zombies to spawn near players.
 * **Min distance from player** - When spawning near players, this is the minimum distance that zombies are allowed to spawn from the player.
 * **Max distance from player** - When spawning near players, this is the maximum distance that zombies are allowed to spawn from the player.
 * **Spawn Time** - The in-game time at which zombies will appear.
@@ -56,6 +60,8 @@
 
 * **Leave Corpse, when destroyed** - Are corpses left when zombies disappear (can affect performance when set to true).
 * **Leave Corpse, when killed by player** - Are corpses left when zombies are killed by players.
+* **Half body bag despawn time** - Is the despawn time for green loot backpacks halved.
+* **Quick destroy corpses** - Are corpses cleaned up after 10 seconds.
 
 ### Behaviour Settings
 
