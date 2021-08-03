@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.2")]
+    [Info("Night Zombies", "0x89A", "3.1.25")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -410,6 +410,8 @@ namespace Oxide.Plugins
                         foreach (Tuple<ItemDefinition, ulong> tuple in murdererItems)
                             entity.inventory.containerWear.AddItem(tuple.Item1, 1, tuple.Item2);
                     }
+
+                    zombies.Add(entity);
                 }
             }
 
