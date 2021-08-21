@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.25")]
+    [Info("Night Zombies", "0x89A", "3.1.3")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -111,7 +111,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private object OnPlayerDeath(NPCMurderer entity, HitInfo info)
+        private void OnPlayerDeath(NPCMurderer entity, HitInfo info)
         {
             if (spawnController.spawned)
             {
@@ -119,11 +119,11 @@ namespace Oxide.Plugins
 
                 Interface.CallHook("OnEntityDeath", entity, info);
 
-                Respawn(entity);
-                return true;
-            }
+                BasePlayer player;
+                Vector3 position = config.Spawn.spawnNearPlayers && spawnController.GetPlayer(out player) ? spawnController.GetRandomPositionAroundPlayer(player) : spawnController.GetRandomPosition();
 
-            return null;
+                Respawn(entity);
+            }
         }
 
         private void OnEntitySpawned(DroppedItemContainer container)
@@ -169,14 +169,6 @@ namespace Oxide.Plugins
 
             entity.Teleport(config.Spawn.spawnNearPlayers && spawnController.GetPlayer(out player) ? spawnController.GetRandomPositionAroundPlayer(player) : spawnController.GetRandomPosition());
             entity.gameObject.SetActive(true);
-
-            NextTick(() =>
-            {
-                if (entity != null && entity.transform.position.y < TerrainMeta.HeightMap.GetHeight(entity.transform.position))
-                {
-                    entity.AdminKill();
-                }
-            });
 
             entity.Heal(entity is NPCMurderer ? config.Spawn.Zombies.murdererHealth : config.Spawn.Zombies.scarecrowHealth);
             entity.SendNetworkUpdateImmediate();
@@ -389,7 +381,7 @@ namespace Oxide.Plugins
 
             #region -Util-
 
-            private void Spawn(string prefab, float health, bool murderer)
+            public void Spawn(string prefab, float health, bool murderer)
             {
                 if (zombies.Count >= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation) return;
 
@@ -439,6 +431,11 @@ namespace Oxide.Plugins
                     else break;
                 }
 
+                if (position == Vector3.zero)
+                {
+                    position.y = TerrainMeta.HeightMap.GetHeight(0, 0);
+                }
+
                 return position;
             }
 
@@ -468,6 +465,11 @@ namespace Oxide.Plugins
                         attempts++;
                     }
                     else break;
+                }
+
+                if (position == Vector3.zero)
+                {
+                    position.y = TerrainMeta.HeightMap.GetHeight(0, 0);
                 }
 
                 return position;
