@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.3")]
+    [Info("Night Zombies", "0x89A", "3.1.4")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -111,7 +111,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private void OnPlayerDeath(NPCMurderer entity, HitInfo info)
+        private object OnPlayerDeath(NPCMurderer entity, HitInfo info)
         {
             if (spawnController.spawned)
             {
@@ -119,11 +119,11 @@ namespace Oxide.Plugins
 
                 Interface.CallHook("OnEntityDeath", entity, info);
 
-                BasePlayer player;
-                Vector3 position = config.Spawn.spawnNearPlayers && spawnController.GetPlayer(out player) ? spawnController.GetRandomPositionAroundPlayer(player) : spawnController.GetRandomPosition();
-
                 Respawn(entity);
+                return true;
             }
+
+            return null;
         }
 
         private void OnEntitySpawned(DroppedItemContainer container)
@@ -180,21 +180,22 @@ namespace Oxide.Plugins
         private void CreateCorpse(BasePlayer zombie)
         {
             NPCPlayerCorpse corpse = GameManager.server.CreateEntity("assets/prefabs/npc/murderer/murderer_corpse.prefab") as NPCPlayerCorpse;
-            corpse.InitCorpse(zombie);
 
-            corpse.SetLootableIn(2f);
-            corpse.SetFlag(BaseEntity.Flags.Reserved5, zombie.HasPlayerFlag(BasePlayer.PlayerFlags.DisplaySash));
-            corpse.SetFlag(BaseEntity.Flags.Reserved2, true);
-
-            ItemContainer[] inventory = new ItemContainer[3]
-            {
-                zombie.inventory.containerMain,
-                zombie.inventory.containerWear,
-                zombie.inventory.containerBelt
-            };
-            
             if (corpse)
             {
+                corpse.InitCorpse(zombie);
+
+                corpse.SetLootableIn(2f);
+                corpse.SetFlag(BaseEntity.Flags.Reserved5, zombie.HasPlayerFlag(BasePlayer.PlayerFlags.DisplaySash));
+                corpse.SetFlag(BaseEntity.Flags.Reserved2, true);
+
+                ItemContainer[] inventory = new ItemContainer[3]
+                {
+                    zombie.inventory.containerMain,
+                    zombie.inventory.containerWear,
+                    zombie.inventory.containerBelt
+                };
+
                 corpse.containers = new ItemContainer[3];
                 for (int i = 0; i < 3; i++)
                 {
@@ -381,7 +382,7 @@ namespace Oxide.Plugins
 
             #region -Util-
 
-            public void Spawn(string prefab, float health, bool murderer)
+            private void Spawn(string prefab, float health, bool murderer)
             {
                 if (zombies.Count >= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation) return;
 
