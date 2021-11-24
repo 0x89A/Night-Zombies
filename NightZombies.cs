@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-
+using System.Linq;
 using UnityEngine;
 using Random = UnityEngine.Random;
 using Physics = UnityEngine.Physics;
+using Time = UnityEngine.Time;
 
 using Oxide.Core;
 using Oxide.Core.Plugins;
@@ -15,31 +16,35 @@ using Rust.Ai.HTN.Murderer;
 using ConVar;
 
 using Newtonsoft.Json;
+using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.4")]
+    [Info("Night Zombies", "0x89A", "3.1.5")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
-        private Configuration config;
-        private DynamicConfigFile dataFile;
+        private static NightZombies _instance;
+        private Configuration _config;
+        private DynamicConfigFile _dataFile;
 
         [PluginReference] Plugin ClothedMurderers, PlaguedMurderers;
 
-        private SpawnController spawnController;
+        private SpawnController _spawnController;
 
         #region -Init-
 
         void Init()
         {
+            _instance = this;
+            
             //Read saved number of days since last spawn
-            dataFile = Interface.Oxide.DataFileSystem.GetFile("NightZombies-daysSinceSpawn");
+            _dataFile = Interface.Oxide.DataFileSystem.GetFile("NightZombies-daysSinceSpawn");
             int i = 0;
             
             try
             {
-                i = dataFile.ReadObject<int>();
+                i = _dataFile.ReadObject<int>();
             }
             catch //Default to 0 if error reading or data broken
             {
@@ -47,7 +52,7 @@ namespace Oxide.Plugins
                 i = 0;
             }
 
-            spawnController = new SpawnController(i, config, this);
+            _spawnController = new SpawnController(i, _config);
         }
 
         //Start time check
@@ -55,19 +60,19 @@ namespace Oxide.Plugins
         {
             timer.Once(5f, () =>
             {
-                TOD_Sky.Instance.Components.Time.OnMinute += spawnController.TimeTick;
-                TOD_Sky.Instance.Components.Time.OnDay += () => spawnController.daysSinceLastSpawn++;
+                TOD_Sky.Instance.Components.Time.OnMinute += _spawnController.TimeTick;
+                TOD_Sky.Instance.Components.Time.OnDay += () => _spawnController.daysSinceLastSpawn++;
             });
         }
 
         void Unload()
         {
-            TOD_Sky.Instance.Components.Time.OnMinute -= spawnController.TimeTick;
-            TOD_Sky.Instance.Components.Time.OnDay -= () => spawnController.daysSinceLastSpawn++;
+            TOD_Sky.Instance.Components.Time.OnMinute -= _spawnController.TimeTick;
+            TOD_Sky.Instance.Components.Time.OnDay -= () => _spawnController.daysSinceLastSpawn++;
 
-            dataFile.WriteObject(spawnController.daysSinceLastSpawn);
+            _dataFile.WriteObject(_spawnController.daysSinceLastSpawn);
 
-            spawnController?.Shutdown();
+            _spawnController?.Shutdown();
         }
 
         #endregion
@@ -86,13 +91,13 @@ namespace Oxide.Plugins
 
         object OnTurretTarget(NPCAutoTurret turret, BaseCombatEntity entity)
         {
-            if ((entity?.ShortPrefabName == "scarecrow" || entity is NPCMurderer) && !config.Behaviour.sentriesAttackZombies) return true;
+            if ((entity?.ShortPrefabName == "scarecrow" || entity is NPCMurderer) && !_config.Behaviour.sentriesAttackZombies) return true;
             return null;
         }
 
         private object OnPlayerDeath(HTNPlayer entity, HitInfo info)
         {
-            if (spawnController.spawned && entity.ShortPrefabName == "scarecrow")
+            if (_spawnController.spawned && entity.ShortPrefabName == "scarecrow")
             {
                 if (entity.AiDefinition is MurdererDefinition)
                 {
@@ -101,8 +106,6 @@ namespace Oxide.Plugins
                     if (def.DeathEffect.isValid) 
                         Effect.server.Run(def.DeathEffect.resourcePath, entity.transform.position);
                 }
-
-                Interface.CallHook("OnEntityDeath", entity, info);
 
                 Respawn(entity);
                 return true;
@@ -113,12 +116,10 @@ namespace Oxide.Plugins
 
         private object OnPlayerDeath(NPCMurderer entity, HitInfo info)
         {
-            if (spawnController.spawned)
+            if (_spawnController.spawned && info.damageTypes.GetMajorityDamageType() != DamageType.Generic)
             {
                 if (entity.DeathEffect.isValid) Effect.server.Run(entity.DeathEffect.resourcePath, entity.transform.position);
-
-                Interface.CallHook("OnEntityDeath", entity, info);
-
+                
                 Respawn(entity);
                 return true;
             }
@@ -128,7 +129,7 @@ namespace Oxide.Plugins
 
         private void OnEntitySpawned(DroppedItemContainer container)
         {
-            if (config.Destroy.halfBodybagDespawn && (container.lootPanelName == "scarecrow" || container.lootPanelName == "murderer"))
+            if (_config.Destroy.halfBodybagDespawn && (container.lootPanelName == "scarecrow" || container.lootPanelName == "murderer"))
             {
                 string methodName = nameof(DroppedItemContainer.RemoveMe);
 
@@ -143,10 +144,10 @@ namespace Oxide.Plugins
 
         private object CanAttack(BaseEntity target)
         {
-            for (int i = 0; i < config.Behaviour.ignored.Count; i++)
-                if ((config.Behaviour.ignoreHumanNPC && HumanNPCCheck(target)) || target.ShortPrefabName == config.Behaviour.ignored[i]) return true;
+            for (int i = 0; i < _config.Behaviour.ignored.Count; i++)
+                if ((_config.Behaviour.ignoreHumanNPC && HumanNPCCheck(target)) || target.ShortPrefabName == _config.Behaviour.ignored[i]) return true;
 
-            if (config.Behaviour.ignored.Contains(target.ShortPrefabName) || (!config.Behaviour.attackSleepers && target is BasePlayer && (target as BasePlayer).IsSleeping())) return true;
+            if (_config.Behaviour.ignored.Contains(target.ShortPrefabName) || (!_config.Behaviour.attackSleepers && target is BasePlayer && (target as BasePlayer).IsSleeping())) return true;
             else return null;
         }
 
@@ -159,113 +160,14 @@ namespace Oxide.Plugins
         private void Respawn(BasePlayer entity)
         {
             if (entity == null) return;
-            
-            if (config.Destroy.leaveCorpseKilled) CreateCorpse(entity);
 
-            //Returns to place of death if not deactivated
-            entity.gameObject.SetActive(false);
-
-            BasePlayer player;
-
-            entity.Teleport(config.Spawn.spawnNearPlayers && spawnController.GetPlayer(out player) ? spawnController.GetRandomPositionAroundPlayer(player) : spawnController.GetRandomPosition());
-            entity.gameObject.SetActive(true);
-
-            entity.Heal(entity is NPCMurderer ? config.Spawn.Zombies.murdererHealth : config.Spawn.Zombies.scarecrowHealth);
-            entity.SendNetworkUpdateImmediate();
-        }
-
-        //Basically just the code from LootableCorpse.TakeFrom, but modified slightly
-        //Required because corspse is spawned after death, zombies are not killed instead recycled
-        //Calling CreateCorpse on entity results in weird behaviour
-        private void CreateCorpse(BasePlayer zombie)
-        {
-            NPCPlayerCorpse corpse = GameManager.server.CreateEntity("assets/prefabs/npc/murderer/murderer_corpse.prefab") as NPCPlayerCorpse;
-
-            if (corpse)
-            {
-                corpse.InitCorpse(zombie);
-
-                corpse.SetLootableIn(2f);
-                corpse.SetFlag(BaseEntity.Flags.Reserved5, zombie.HasPlayerFlag(BasePlayer.PlayerFlags.DisplaySash));
-                corpse.SetFlag(BaseEntity.Flags.Reserved2, true);
-
-                ItemContainer[] inventory = new ItemContainer[3]
-                {
-                    zombie.inventory.containerMain,
-                    zombie.inventory.containerWear,
-                    zombie.inventory.containerBelt
-                };
-
-                corpse.containers = new ItemContainer[3];
-                for (int i = 0; i < 3; i++)
-                {
-                    ItemContainer container = corpse.containers[i] = new ItemContainer();
-                    ItemContainer invContainer = inventory[i];
-
-                    container.ServerInitialize(null, invContainer.capacity);
-                    container.GiveUID();
-                    container.entityOwner = zombie;
-
-                    foreach (Item item in invContainer.itemList.ToArray())
-                    {
-                        if (item.info.shortname == "gloweyes") continue;
-
-                        Item item2 = ItemManager.CreateByItemID(item.info.itemid, item.amount, item.skin);
-
-                        if (!item2.MoveToContainer(container)) 
-                            item2.DropAndTossUpwards(zombie.transform.position, 2f);
-                    }
-                }
-
-                corpse.playerName = zombie.displayName;
-                corpse.playerSteamID = zombie.userID;
-
-                corpse.Spawn();
-
-                SpawnLoot(zombie, corpse);
-
-                if (config.Destroy.quickDestroyCorpse)
-                {
-                    timer.Once(10f, () =>
-                    {
-                        if (corpse != null) corpse.Die();
-                    });
-                }
-            }
-        }
-
-        private void SpawnLoot(BasePlayer player, NPCPlayerCorpse corpse)
-        {
-            LootContainer.LootSpawnSlot[] lootSlots = null;
-            ItemContainer[] containers = corpse.containers;
-
-            if (player is NPCMurderer) lootSlots = (player as NPCMurderer).LootSpawnSlots;
-            else if (player is HTNPlayer) lootSlots = ((player as HTNPlayer)._aiDefinition as MurdererDefinition).Loot;
-
-            for (int i = 0; i < containers.Length; i++)
-                containers[i].Clear();
-
-            if (lootSlots != null && lootSlots.Length > 0)
-            {
-                for (int i = 0; i < lootSlots.Length; i++)
-                {
-                    LootContainer.LootSpawnSlot slot = lootSlots[i];
-
-                    for (int x = 0; x < slot.numberToSpawn; x++)
-                    {
-                        if (Random.Range(0f, 1f) <= slot.probability)
-                            slot.definition.SpawnIntoContainer(corpse.containers[0]);
-                    }
-                }
-            }
+            _spawnController.Respawn(entity);
         }
 
         #endregion -Helpers
 
         private class SpawnController
         {
-            private NightZombies instance;
-
             private const string murdererPrefab = "assets/prefabs/npc/murderer/murderer.prefab";
             private const string scarecrowPrefab = "assets/prefabs/npc/scarecrow/scarecrow.prefab";
 
@@ -293,12 +195,10 @@ namespace Oxide.Plugins
 
             public bool spawned;
 
-            private List<BaseCombatEntity> zombies = new List<BaseCombatEntity>();
+            private Dictionary<BaseCombatEntity, NightZombie> zombies = new Dictionary<BaseCombatEntity, NightZombie>();
 
-            public SpawnController(int daysSinceLastSpawn, Configuration config, NightZombies instance)
+            public SpawnController(int daysSinceLastSpawn, Configuration config)
             {
-                this.instance = instance;
-
                 this.daysSinceLastSpawn = daysSinceLastSpawn;
 
                 spawnTime = config.Spawn.spawnTime;
@@ -317,7 +217,7 @@ namespace Oxide.Plugins
                 if (zombiesConfig.murdererPopuluation > 0)
                 {
                     murdererTimer?.Destroy();
-                    murdererTimer = instance.timer.Repeat(0.5f, zombiesConfig.murdererPopuluation, () =>
+                    murdererTimer = _instance.timer.Repeat(0.5f, zombiesConfig.murdererPopuluation, () =>
                     {
                         if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
                         {
@@ -329,7 +229,7 @@ namespace Oxide.Plugins
                 if (zombiesConfig.scarecrowPopulation > 0)
                 {
                     scarecrowTimer?.Destroy();
-                    scarecrowTimer = instance.timer.Repeat(0.5f, zombiesConfig.scarecrowPopulation, () =>
+                    scarecrowTimer = _instance.timer.Repeat(0.5f, zombiesConfig.scarecrowPopulation, () =>
                     {
                         if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
                         {
@@ -338,9 +238,9 @@ namespace Oxide.Plugins
                     });
                 }
 
-                if (!spawned && instance.config.Broadcast.doBroadcast)
+                if (!spawned && _instance._config.Broadcast.doBroadcast)
                 {
-                    if (instance.config.Broadcast.broadcastSeparate) Broadcast("ChatBroadcastSeparate", zombiesConfig.scarecrowPopulation, zombiesConfig.murdererPopuluation);
+                    if (_instance._config.Broadcast.broadcastSeparate) Broadcast("ChatBroadcastSeparate", zombiesConfig.scarecrowPopulation, zombiesConfig.murdererPopuluation);
                     else Broadcast("ChatBroadcast", zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation);
                 }
 
@@ -350,14 +250,11 @@ namespace Oxide.Plugins
 
             public IEnumerator RemoveZombies(bool configOverride = false, Action complete = null)
             {
-                BaseCombatEntity[] array = zombies.ToArray();
-
-                for (int i = 0; i < zombies.Count; i++)
+                foreach (BaseCombatEntity entity in zombies.Keys.ToArray())
                 {
-                    BaseCombatEntity entity = array[i];
                     if (entity == null) continue;
-
-                    if (instance.config.Destroy.leaveCorpse && !configOverride) instance.CreateCorpse(entity as BasePlayer);
+                    
+                    if (_instance._config.Destroy.leaveCorpse && !configOverride) zombies[entity].CreateCorpse();
 
                     entity.AdminKill();
                 }
@@ -370,6 +267,15 @@ namespace Oxide.Plugins
                 yield break;
             }
 
+            public void Respawn(BaseCombatEntity entity)
+            {
+                NightZombie zombie;
+                if (zombies.TryGetValue(entity, out zombie))
+                {
+                    zombie.OnDeath();
+                }
+            }
+            
             public void TimeTick()
             {
                 if (!spawned && CanSpawn()) ServerMgr.Instance.StartCoroutine(RemoveZombies(false, SpawnZombies));
@@ -393,18 +299,20 @@ namespace Oxide.Plugins
 
                 if (entity)
                 {
+                    NightZombie zombie = entity.gameObject.AddComponent<NightZombie>();
+                    zombie.Init(murderer ? NightZombie.ZombieType.Murderer : NightZombie.ZombieType.Scarecrow);
                     entity.gameObject.AwakeFromInstantiate();
                     entity.Spawn();
                     entity.SetMaxHealth(health);
                     entity.SetHealth(health);
 
-                    if (murderer && (!instance.ClothedMurderers || !instance.ClothedMurderers.IsLoaded) && (!instance.PlaguedMurderers || !instance.PlaguedMurderers.IsLoaded))
+                    if (murderer && (!_instance.ClothedMurderers || !_instance.ClothedMurderers.IsLoaded) && (!_instance.PlaguedMurderers || !_instance.PlaguedMurderers.IsLoaded))
                     {
                         foreach (Tuple<ItemDefinition, ulong> tuple in murdererItems)
                             entity.inventory.containerWear.AddItem(tuple.Item1, 1, tuple.Item2);
                     }
 
-                    zombies.Add(entity);
+                    zombies.Add(entity, zombie);
                 }
             }
 
@@ -497,11 +405,11 @@ namespace Oxide.Plugins
             {
                 try
                 {
-                    instance.Server.Broadcast(string.Format(instance.lang.GetMessage(key, instance), values));
+                    _instance.Server.Broadcast(string.Format(_instance.lang.GetMessage(key, _instance), values));
                 }
                 catch
                 {
-                    instance.Server.Broadcast(values.Length == 1 ? instance.lang.GetMessage(key, instance).Replace("{0}", (string)values[0]) : instance.lang.GetMessage(key, instance).Replace("{0}", (string)values[0]).Replace("{1}", (string)values[1]));
+                    _instance.Server.Broadcast(values.Length == 1 ? _instance.lang.GetMessage(key, _instance).Replace("{0}", (string)values[0]) : _instance.lang.GetMessage(key, _instance).Replace("{0}", (string)values[0]).Replace("{1}", (string)values[1]));
                 }
             }
 
@@ -520,6 +428,153 @@ namespace Oxide.Plugins
                 StopTimers();
 
                 ServerMgr.Instance.StartCoroutine(RemoveZombies(true));
+            }
+        }
+        
+        private class NightZombie : MonoBehaviour
+        {
+            public float LastSpawnTime { get; private set; }
+            public ZombieType Type { get; private set; }
+            private BasePlayer _player;
+            
+            public enum ZombieType { Murderer, Scarecrow }
+
+            private void Awake()
+            {
+                _player = GetComponent<BasePlayer>();
+            }
+
+            public void Init(ZombieType type)
+            {
+                Type = type;
+                LastSpawnTime = 0;
+            }
+            
+            private void Respawn()
+            {
+                if (_instance._config.Destroy.leaveCorpseKilled) 
+                {
+                    CreateCorpse();
+                }
+                
+                //Returns to place of death if not deactivated
+                _player.gameObject.SetActive(false);
+
+                BasePlayer player;
+
+                Vector3 position = _instance._config.Spawn.spawnNearPlayers && _instance._spawnController.GetPlayer(out player)
+                    ? _instance._spawnController.GetRandomPositionAroundPlayer(player)
+                    : _instance._spawnController.GetRandomPosition();
+
+                if (position == Vector3.zero)
+                {
+                    _player.AdminKill();
+                    return;
+                }
+                
+                _player.Teleport(position);
+                _player.gameObject.SetActive(true);
+
+                _player.Heal(_player is NPCMurderer ? _instance._config.Spawn.Zombies.murdererHealth : _instance._config.Spawn.Zombies.scarecrowHealth);
+                _player.SendNetworkUpdateImmediate();
+            }
+
+            public void OnDeath()
+            {
+                if (Time.time - LastSpawnTime < 0.5f)
+                {
+                    _player.AdminKill();
+                    return;
+                }
+                
+                if (_player == null || _player.IsDead())
+                {
+                    return;
+                }
+
+                Respawn();
+                
+                LastSpawnTime = Time.time;
+            }
+
+            public void CreateCorpse()
+            {
+                NPCPlayerCorpse corpse = GameManager.server.CreateEntity("assets/prefabs/npc/murderer/murderer_corpse.prefab") as NPCPlayerCorpse;
+
+                if (corpse)
+                {
+                    corpse.InitCorpse(_player);
+
+                    corpse.SetLootableIn(2f);
+                    corpse.SetFlag(BaseEntity.Flags.Reserved5, _player.HasPlayerFlag(BasePlayer.PlayerFlags.DisplaySash));
+                    corpse.SetFlag(BaseEntity.Flags.Reserved2, true);
+
+                    ItemContainer[] inventory = new ItemContainer[3]
+                    {
+                        _player.inventory.containerMain,
+                        _player.inventory.containerWear,
+                        _player.inventory.containerBelt
+                    };
+
+                    corpse.containers = new ItemContainer[3];
+                    for (int i = 0; i < 3; i++)
+                    {
+                        ItemContainer container = corpse.containers[i] = new ItemContainer();
+                        ItemContainer invContainer = inventory[i];
+
+                        container.ServerInitialize(null, invContainer.capacity);
+                        container.GiveUID();
+                        container.entityOwner = _player;
+
+                        foreach (Item item in invContainer.itemList.ToArray())
+                        {
+                            if (item.info.shortname == "gloweyes") continue;
+
+                            Item item2 = ItemManager.CreateByItemID(item.info.itemid, item.amount, item.skin);
+
+                            if (!item2.MoveToContainer(container))
+                                item2.DropAndTossUpwards(_player.transform.position, 2f);
+                        }
+                    }
+
+                    corpse.playerName = _player.displayName;
+                    corpse.playerSteamID = _player.userID;
+
+                    corpse.Spawn();
+
+                    //Spawn loot
+                    LootContainer.LootSpawnSlot[] lootSlots = null;
+                    ItemContainer[] containers = corpse.containers;
+
+                    //Get loot
+                    if (_player is NPCMurderer) lootSlots = (_player as NPCMurderer).LootSpawnSlots;
+                    else if (_player is HTNPlayer) lootSlots = ((_player as HTNPlayer)._aiDefinition as MurdererDefinition).Loot;
+                    else return;
+
+                    //Clear inventory
+                    for (int i = 0; i < containers.Length; i++)
+                        containers[i].Clear();
+
+                    //Populate containers
+                    if (lootSlots != null && lootSlots.Length > 0)
+                    {
+                        for (int i = 0; i < lootSlots.Length; i++)
+                        {
+                            LootContainer.LootSpawnSlot slot = lootSlots[i];
+
+                            for (int x = 0; x < slot.numberToSpawn; x++)
+                            {
+                                if (Random.Range(0f, 1f) <= slot.probability)
+                                    slot.definition.SpawnIntoContainer(corpse.containers[0]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            private void OnDestroy()
+            {
+                CancelInvoke(nameof(CreateCorpse));
             }
         }
 
@@ -635,28 +690,28 @@ namespace Oxide.Plugins
             base.LoadConfig();
             try
             {
-                config = Config.ReadObject<Configuration>();
-                if (config == null) throw new Exception();
-                if (config.Spawn.spawnTime > 24 || config.Spawn.spawnTime < 0)
+                _config = Config.ReadObject<Configuration>();
+                if (_config == null) throw new Exception();
+                if (_config.Spawn.spawnTime > 24 || _config.Spawn.spawnTime < 0)
                 {
                     PrintWarning("Invalid spawn time (must be in 24 hour time)");
-                    config.Spawn.spawnTime = 19.5f;
+                    _config.Spawn.spawnTime = 19.5f;
                 }
-                if (config.Spawn.destroyTime > 24 || config.Spawn.destroyTime < 0)
+                if (_config.Spawn.destroyTime > 24 || _config.Spawn.destroyTime < 0)
                 {
                     PrintWarning("Invalid destroy time (must be in 24 hour time)");
-                    config.Spawn.destroyTime = 7f;
+                    _config.Spawn.destroyTime = 7f;
                 }
                 SaveConfig();
             }
             catch
             {
-                PrintError("Failed to load config, using default values");
+                PrintError("Failed to load _config, using default values");
                 LoadDefaultConfig();
             }
         }
 
-        protected override void LoadDefaultConfig() => config = new Configuration
+        protected override void LoadDefaultConfig() => _config = new Configuration
         {
             Behaviour = new Configuration.BehaviourSettings
             {
@@ -668,7 +723,7 @@ namespace Oxide.Plugins
             }
         };
 
-        protected override void SaveConfig() => Config.WriteObject(config);
+        protected override void SaveConfig() => Config.WriteObject(_config);
 
         #endregion
 
