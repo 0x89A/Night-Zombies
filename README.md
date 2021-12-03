@@ -68,6 +68,8 @@
 
 ## Notes
 
+**These are likely broken after the large AI update 2nd December 2021**
+
 The 0.9.0 and 2.0 versions are still available to download if you want them.
 
 * You can find v0.9.0 and its documentation [here](https://github.com/0x89A/Night-Zombies/tree/deprecated-v0.9.0)
