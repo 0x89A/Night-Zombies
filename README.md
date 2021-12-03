@@ -10,8 +10,6 @@
     "Spawn Time": 19.8,
     "Destroy Time": 7.3,
     "Zombie Settings": {
-      "Murderer Population (total amount)": 50,
-      "Murderer Health": 100.0,
       "Scarecrow Population (total amount)": 50,
       "Scarecrow Health": 200.0
     },
@@ -37,7 +35,6 @@
   },
   "Broadcast Settings": {
     "Broadcast spawn amount": false,
-    "Broadcast types separately": false
   }
 }
 ```
