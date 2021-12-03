@@ -8,28 +8,22 @@ using Physics = UnityEngine.Physics;
 using Time = UnityEngine.Time;
 
 using Oxide.Core;
-using Oxide.Core.Plugins;
 using Oxide.Core.Configuration;
-
-using Rust.Ai.HTN.Murderer;
 
 using ConVar;
 
 using Newtonsoft.Json;
-using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.1.5")]
+    [Info("Night Zombies", "0x89A", "3.2.5")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
         private static NightZombies _instance;
         private Configuration _config;
         private DynamicConfigFile _dataFile;
-
-        [PluginReference] Plugin ClothedMurderers, PlaguedMurderers;
-
+        
         private SpawnController _spawnController;
 
         #region -Init-
@@ -79,47 +73,20 @@ namespace Oxide.Plugins
 
         #region -Oxide Hooks-
 
-        object OnNpcTarget(HTNPlayer npc, BaseEntity target)
-        {
-            return npc.ShortPrefabName == "scarecrow" ? CanAttack(target) : null;
-        }
-
-        object OnNpcTarget(NPCMurderer npc, BaseEntity target)
+        object OnNpcTarget(ScarecrowNPC npc, BaseEntity target)
         {
             return CanAttack(target);
         }
 
-        object OnTurretTarget(NPCAutoTurret turret, BaseCombatEntity entity)
+        object OnTurretTarget(NPCAutoTurret turret, ScarecrowNPC entity)
         {
-            if ((entity?.ShortPrefabName == "scarecrow" || entity is NPCMurderer) && !_config.Behaviour.sentriesAttackZombies) return true;
-            return null;
+            return !_config.Behaviour.sentriesAttackZombies ? (object)true : null;
         }
 
-        private object OnPlayerDeath(HTNPlayer entity, HitInfo info)
+        private object OnPlayerDeath(ScarecrowNPC entity, HitInfo info)
         {
-            if (_spawnController.spawned && entity.ShortPrefabName == "scarecrow")
+            if (_spawnController.spawned)
             {
-                if (entity.AiDefinition is MurdererDefinition)
-                {
-                    MurdererDefinition def = entity.AiDefinition as MurdererDefinition;
-
-                    if (def.DeathEffect.isValid) 
-                        Effect.server.Run(def.DeathEffect.resourcePath, entity.transform.position);
-                }
-
-                Respawn(entity);
-                return true;
-            }
-
-            return null;
-        }
-
-        private object OnPlayerDeath(NPCMurderer entity, HitInfo info)
-        {
-            if (_spawnController.spawned && info.damageTypes.GetMajorityDamageType() != DamageType.Generic)
-            {
-                if (entity.DeathEffect.isValid) Effect.server.Run(entity.DeathEffect.resourcePath, entity.transform.position);
-                
                 Respawn(entity);
                 return true;
             }
@@ -154,7 +121,7 @@ namespace Oxide.Plugins
         private bool HumanNPCCheck(BaseEntity target)
         {
             BasePlayer player = target as BasePlayer;
-            return player != null && !player.userID.IsSteamId() && !(target is Scientist) && !(target is HTNPlayer);
+            return player != null && !player.userID.IsSteamId() && !(target is ScientistNPC) && !(target is ScarecrowNPC);
         }
 
         private void Respawn(BasePlayer entity)
@@ -168,18 +135,7 @@ namespace Oxide.Plugins
 
         private class SpawnController
         {
-            private const string murdererPrefab = "assets/prefabs/npc/murderer/murderer.prefab";
-            private const string scarecrowPrefab = "assets/prefabs/npc/scarecrow/scarecrow.prefab";
-
-            private List<Tuple<ItemDefinition, ulong>> murdererItems = new List<Tuple<ItemDefinition, ulong>>
-            {
-                new Tuple<ItemDefinition, ulong>(FindDefinition(1877339384), 807624505),
-                new Tuple<ItemDefinition, ulong>(FindDefinition(-690276911), 0),
-                new Tuple<ItemDefinition, ulong>(FindDefinition(223891266), 795997221),
-                new Tuple<ItemDefinition, ulong>(FindDefinition(1366282552), 1132774091),
-                new Tuple<ItemDefinition, ulong>(FindDefinition(1992974553), 806966575),
-                new Tuple<ItemDefinition, ulong>(FindDefinition(-1549739227), 0)
-            };
+            private const string prefab = "assets/prefabs/npc/scarecrow/scarecrow.prefab";
 
             private Configuration.SpawnSettings spawnConfig;
             private Configuration.SpawnSettings.ZombieSettings zombiesConfig;
@@ -189,8 +145,7 @@ namespace Oxide.Plugins
             private bool isDestroyTime => spawnTime > destroyTime ? Env.time >= destroyTime && Env.time < spawnTime : Env.time <= destroyTime && Env.time > spawnTime;
 
             public int daysSinceLastSpawn;
-
-            public Timer murdererTimer;
+            
             public Timer scarecrowTimer;
 
             public bool spawned;
@@ -214,34 +169,21 @@ namespace Oxide.Plugins
 
                 ServerMgr.Instance.StopCoroutine(RemoveZombies());
 
-                if (zombiesConfig.murdererPopuluation > 0)
-                {
-                    murdererTimer?.Destroy();
-                    murdererTimer = _instance.timer.Repeat(0.5f, zombiesConfig.murdererPopuluation, () =>
-                    {
-                        if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
-                        {
-                            Spawn(murdererPrefab, zombiesConfig.murdererHealth, true);
-                        }
-                    });
-                }
-
                 if (zombiesConfig.scarecrowPopulation > 0)
                 {
                     scarecrowTimer?.Destroy();
                     scarecrowTimer = _instance.timer.Repeat(0.5f, zombiesConfig.scarecrowPopulation, () =>
                     {
-                        if (zombies.Count <= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation)
+                        if (zombies.Count <= zombiesConfig.scarecrowPopulation)
                         {
-                            Spawn(scarecrowPrefab, zombiesConfig.scarecrowHealth, false);
+                            Spawn();
                         }
                     });
                 }
 
-                if (!spawned && _instance._config.Broadcast.doBroadcast)
+                if (_instance._config.Broadcast.doBroadcast)
                 {
-                    if (_instance._config.Broadcast.broadcastSeparate) Broadcast("ChatBroadcastSeparate", zombiesConfig.scarecrowPopulation, zombiesConfig.murdererPopuluation);
-                    else Broadcast("ChatBroadcast", zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation);
+                    Broadcast("ChatBroadcast", zombiesConfig.scarecrowPopulation);
                 }
 
                 daysSinceLastSpawn = 0;
@@ -288,9 +230,9 @@ namespace Oxide.Plugins
 
             #region -Util-
 
-            private void Spawn(string prefab, float health, bool murderer)
+            private void Spawn()
             {
-                if (zombies.Count >= zombiesConfig.murdererPopuluation + zombiesConfig.scarecrowPopulation) return;
+                if (zombies.Count >= zombiesConfig.scarecrowPopulation) return;
 
                 BasePlayer player;
                 Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= spawnConfig.minNearPlayers && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
@@ -300,17 +242,12 @@ namespace Oxide.Plugins
                 if (entity)
                 {
                     NightZombie zombie = entity.gameObject.AddComponent<NightZombie>();
-                    zombie.Init(murderer ? NightZombie.ZombieType.Murderer : NightZombie.ZombieType.Scarecrow);
                     entity.gameObject.AwakeFromInstantiate();
                     entity.Spawn();
+
+                    float health = spawnConfig.Zombies.scarecrowHealth;
                     entity.SetMaxHealth(health);
                     entity.SetHealth(health);
-
-                    if (murderer && (!_instance.ClothedMurderers || !_instance.ClothedMurderers.IsLoaded) && (!_instance.PlaguedMurderers || !_instance.PlaguedMurderers.IsLoaded))
-                    {
-                        foreach (Tuple<ItemDefinition, ulong> tuple in murdererItems)
-                            entity.inventory.containerWear.AddItem(tuple.Item1, 1, tuple.Item2);
-                    }
 
                     zombies.Add(entity, zombie);
                 }
@@ -419,7 +356,6 @@ namespace Oxide.Plugins
 
             private void StopTimers()
             {
-                murdererTimer?.Destroy();
                 scarecrowTimer?.Destroy();
             }
 
@@ -433,23 +369,18 @@ namespace Oxide.Plugins
         
         private class NightZombie : MonoBehaviour
         {
+            private const string _corpsePrefab = "assets/rust.ai/agents/npcplayer/pet/frankensteinpet_corpse.prefab";
+        
             public float LastSpawnTime { get; private set; }
-            public ZombieType Type { get; private set; }
-            private BasePlayer _player;
-            
-            public enum ZombieType { Murderer, Scarecrow }
+            private ScarecrowNPC _scarecrow;
+            private LootContainer.LootSpawnSlot[] _loot;
 
             private void Awake()
             {
-                _player = GetComponent<BasePlayer>();
+                _scarecrow = GetComponent<ScarecrowNPC>();
+                _loot = _scarecrow.LootSpawnSlots;
             }
 
-            public void Init(ZombieType type)
-            {
-                Type = type;
-                LastSpawnTime = 0;
-            }
-            
             private void Respawn()
             {
                 if (_instance._config.Destroy.leaveCorpseKilled) 
@@ -458,7 +389,7 @@ namespace Oxide.Plugins
                 }
                 
                 //Returns to place of death if not deactivated
-                _player.gameObject.SetActive(false);
+                _scarecrow.gameObject.SetActive(false);
 
                 BasePlayer player;
 
@@ -468,26 +399,26 @@ namespace Oxide.Plugins
 
                 if (position == Vector3.zero)
                 {
-                    _player.AdminKill();
+                    _scarecrow.AdminKill();
                     return;
                 }
                 
-                _player.Teleport(position);
-                _player.gameObject.SetActive(true);
+                _scarecrow.Teleport(position);
+                _scarecrow.gameObject.SetActive(true);
 
-                _player.Heal(_player is NPCMurderer ? _instance._config.Spawn.Zombies.murdererHealth : _instance._config.Spawn.Zombies.scarecrowHealth);
-                _player.SendNetworkUpdateImmediate();
+                _scarecrow.Heal(_instance._config.Spawn.Zombies.scarecrowHealth);
+                _scarecrow.SendNetworkUpdateImmediate();
             }
 
             public void OnDeath()
             {
                 if (Time.time - LastSpawnTime < 0.5f)
                 {
-                    _player.AdminKill();
+                    _scarecrow.AdminKill();
                     return;
                 }
                 
-                if (_player == null || _player.IsDead())
+                if (_scarecrow == null || _scarecrow.IsDead())
                 {
                     return;
                 }
@@ -499,21 +430,21 @@ namespace Oxide.Plugins
 
             public void CreateCorpse()
             {
-                NPCPlayerCorpse corpse = GameManager.server.CreateEntity("assets/prefabs/npc/murderer/murderer_corpse.prefab") as NPCPlayerCorpse;
+                NPCPlayerCorpse corpse = GameManager.server.CreateEntity(_corpsePrefab) as NPCPlayerCorpse;
 
                 if (corpse)
                 {
-                    corpse.InitCorpse(_player);
+                    corpse.InitCorpse(_scarecrow);
 
                     corpse.SetLootableIn(2f);
-                    corpse.SetFlag(BaseEntity.Flags.Reserved5, _player.HasPlayerFlag(BasePlayer.PlayerFlags.DisplaySash));
+                    corpse.SetFlag(BaseEntity.Flags.Reserved5, _scarecrow.HasPlayerFlag(BasePlayer.PlayerFlags.DisplaySash));
                     corpse.SetFlag(BaseEntity.Flags.Reserved2, true);
 
                     ItemContainer[] inventory = new ItemContainer[3]
                     {
-                        _player.inventory.containerMain,
-                        _player.inventory.containerWear,
-                        _player.inventory.containerBelt
+                        _scarecrow.inventory.containerMain,
+                        _scarecrow.inventory.containerWear,
+                        _scarecrow.inventory.containerBelt
                     };
 
                     corpse.containers = new ItemContainer[3];
@@ -524,7 +455,7 @@ namespace Oxide.Plugins
 
                         container.ServerInitialize(null, invContainer.capacity);
                         container.GiveUID();
-                        container.entityOwner = _player;
+                        container.entityOwner = _scarecrow;
 
                         foreach (Item item in invContainer.itemList.ToArray())
                         {
@@ -533,34 +464,28 @@ namespace Oxide.Plugins
                             Item item2 = ItemManager.CreateByItemID(item.info.itemid, item.amount, item.skin);
 
                             if (!item2.MoveToContainer(container))
-                                item2.DropAndTossUpwards(_player.transform.position, 2f);
+                                item2.DropAndTossUpwards(_scarecrow.transform.position, 2f);
                         }
                     }
 
-                    corpse.playerName = _player.displayName;
-                    corpse.playerSteamID = _player.userID;
+                    corpse.playerName = _scarecrow.displayName;
+                    corpse.playerSteamID = _scarecrow.userID;
 
                     corpse.Spawn();
 
                     //Spawn loot
-                    LootContainer.LootSpawnSlot[] lootSlots = null;
                     ItemContainer[] containers = corpse.containers;
-
-                    //Get loot
-                    if (_player is NPCMurderer) lootSlots = (_player as NPCMurderer).LootSpawnSlots;
-                    else if (_player is HTNPlayer) lootSlots = ((_player as HTNPlayer)._aiDefinition as MurdererDefinition).Loot;
-                    else return;
 
                     //Clear inventory
                     for (int i = 0; i < containers.Length; i++)
                         containers[i].Clear();
 
                     //Populate containers
-                    if (lootSlots != null && lootSlots.Length > 0)
+                    if (_loot.Length > 0)
                     {
-                        for (int i = 0; i < lootSlots.Length; i++)
+                        for (int i = 0; i < _loot.Length; i++)
                         {
-                            LootContainer.LootSpawnSlot slot = lootSlots[i];
+                            LootContainer.LootSpawnSlot slot = _loot[i];
 
                             for (int x = 0; x < slot.numberToSpawn; x++)
                             {
@@ -619,12 +544,6 @@ namespace Oxide.Plugins
 
                 public class ZombieSettings
                 {
-                    [JsonProperty("Murderer Population (total amount)")]
-                    public int murdererPopuluation = 50;
-
-                    [JsonProperty("Murderer Health")]
-                    public float murdererHealth = 100f;
-
                     [JsonProperty("Scarecrow Population (total amount)")]
                     public int scarecrowPopulation = 50;
 
@@ -679,9 +598,6 @@ namespace Oxide.Plugins
             {
                 [JsonProperty("Broadcast spawn amount")]
                 public bool doBroadcast = false;
-
-                [JsonProperty("Broadcast types separately")]
-                public bool broadcastSeparate = false;
             }
         }
 
