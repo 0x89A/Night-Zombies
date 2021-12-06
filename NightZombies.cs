@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+
 using UnityEngine;
 using Random = UnityEngine.Random;
 using Physics = UnityEngine.Physics;
@@ -16,7 +17,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.2.5")]
+    [Info("Night Zombies", "0x89A", "3.2.6")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -367,7 +368,7 @@ namespace Oxide.Plugins
             }
         }
         
-        private class NightZombie : MonoBehaviour
+        private class NightZombie : FacepunchBehaviour
         {
             private const string _corpsePrefab = "assets/rust.ai/agents/npcplayer/pet/frankensteinpet_corpse.prefab";
         
@@ -379,6 +380,18 @@ namespace Oxide.Plugins
             {
                 _scarecrow = GetComponent<ScarecrowNPC>();
                 _loot = _scarecrow.LootSpawnSlots;
+                
+                InvokeRepeating(AttackTick, 0f, 0.5f);
+            }
+
+            private void AttackTick()
+            {
+                BaseEntity entity = _scarecrow.Brain.Senses.GetNearestTarget(100);
+                
+                if (entity != null && _scarecrow.CanAttack(entity) && Vector3.Distance(entity.transform.position, _scarecrow.transform.position) < 1.5f)
+                {
+                    _scarecrow.StartAttacking(entity);
+                }
             }
 
             private void Respawn()
