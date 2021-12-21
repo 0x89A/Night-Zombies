@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,7 +17,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.2.6")]
+    [Info("Night Zombies", "0x89A", "3.2.7")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -86,7 +86,7 @@ namespace Oxide.Plugins
 
         private object OnPlayerDeath(ScarecrowNPC entity, HitInfo info)
         {
-            if (_spawnController.spawned)
+            if (_spawnController.spawned && _spawnController.IsNightZombie(entity))
             {
                 Respawn(entity);
                 return true;
@@ -350,6 +350,8 @@ namespace Oxide.Plugins
                     _instance.Server.Broadcast(values.Length == 1 ? _instance.lang.GetMessage(key, _instance).Replace("{0}", (string)values[0]) : _instance.lang.GetMessage(key, _instance).Replace("{0}", (string)values[0]).Replace("{1}", (string)values[1]));
                 }
             }
+
+            public bool IsNightZombie(BaseCombatEntity entity) => zombies.ContainsKey(entity);
 
             private static ItemDefinition FindDefinition(int id) => ItemManager.FindItemDefinition(id);
 
