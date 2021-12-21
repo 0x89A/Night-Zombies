@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -373,7 +373,7 @@ namespace Oxide.Plugins
         private class NightZombie : FacepunchBehaviour
         {
             private const string _corpsePrefab = "assets/rust.ai/agents/npcplayer/pet/frankensteinpet_corpse.prefab";
-        
+            
             public float LastSpawnTime { get; private set; }
             private ScarecrowNPC _scarecrow;
             private LootContainer.LootSpawnSlot[] _loot;
@@ -383,17 +383,15 @@ namespace Oxide.Plugins
                 _scarecrow = GetComponent<ScarecrowNPC>();
                 _loot = _scarecrow.LootSpawnSlots;
                 
-                InvokeRepeating(AttackTick, 0f, 0.5f);
+                ScarecrowBrain brain = _scarecrow.GetComponent<ScarecrowBrain>();
+                brain.AddStates();
+                brain.states.Remove(AIState.Chase);
+                brain.AddState(new BrainState());
             }
 
-            private void AttackTick()
+            private void PlaySound()
             {
-                BaseEntity entity = _scarecrow.Brain.Senses.GetNearestTarget(100);
                 
-                if (entity != null && _scarecrow.CanAttack(entity) && Vector3.Distance(entity.transform.position, _scarecrow.transform.position) < 1.5f)
-                {
-                    _scarecrow.StartAttacking(entity);
-                }
             }
 
             private void Respawn()
@@ -405,13 +403,13 @@ namespace Oxide.Plugins
                 
                 //Returns to place of death if not deactivated
                 _scarecrow.gameObject.SetActive(false);
-
+                
                 BasePlayer player;
-
+                
                 Vector3 position = _instance._config.Spawn.spawnNearPlayers && _instance._spawnController.GetPlayer(out player)
-                    ? _instance._spawnController.GetRandomPositionAroundPlayer(player)
-                    : _instance._spawnController.GetRandomPosition();
-
+                                 ? _instance._spawnController.GetRandomPositionAroundPlayer(player)
+                                 : _instance._spawnController.GetRandomPosition();
+                
                 if (position == Vector3.zero)
                 {
                     _scarecrow.AdminKill();
@@ -437,7 +435,7 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
-
+                
                 Respawn();
                 
                 LastSpawnTime = Time.time;
@@ -516,10 +514,26 @@ namespace Oxide.Plugins
             {
                 CancelInvoke(nameof(CreateCorpse));
             }
+
+            private class BrainState : BaseAIBrain<ScarecrowNPC>.BaseChaseState
+            {
+                public override StateStatus StateThink(float delta)
+                {
+                    BaseEntity entity = brain.Senses.GetNearestTarget(100);
+                    ScarecrowNPC scarecrow = GetEntity();
+                
+                    if (entity != null && scarecrow.CanAttack(entity) && Vector3.Distance(entity.transform.position, scarecrow.transform.position) < 1.5f)
+                    {
+                        scarecrow.StartAttacking(entity);
+                    }
+                    
+                    return StateStatus.Running;
+                }
+            }
         }
-
+        
         #region -Configuration-
-
+        
         class Configuration
         {
             [JsonProperty("Spawn Settings")]
@@ -561,9 +575,15 @@ namespace Oxide.Plugins
                 {
                     [JsonProperty("Scarecrow Population (total amount)")]
                     public int scarecrowPopulation = 50;
-
+                    
                     [JsonProperty("Scarecrow Health")]
                     public float scarecrowHealth = 200f;
+                    
+                    [JsonProperty("Scarecrow Sound")]
+                    public string scarecrowSound = string.Empty;
+                    
+                    [JsonProperty("Scarecrow Kits")]
+                    public List<string> scarecrowKits = new List<string>();
                 }
 
                 [JsonProperty("Chance Settings")]
@@ -573,7 +593,7 @@ namespace Oxide.Plugins
                 {
                     [JsonProperty("Chance per cycle")]
                     public float chance = 100f;
-
+                    
                     [JsonProperty("Days betewen spawn")]
                     public int days = 0;
                 }
@@ -583,13 +603,13 @@ namespace Oxide.Plugins
             {
                 [JsonProperty("Leave Corpse, when destroyed")]
                 public bool leaveCorpse = false;
-
+                
                 [JsonProperty("Leave Corpse, when killed by player")]
                 public bool leaveCorpseKilled = true;
-
+                
                 [JsonProperty("Half bodybag despawn time")]
                 public bool halfBodybagDespawn = true;
-
+                
                 [JsonProperty("Quick destroy corpses")]
                 public bool quickDestroyCorpse = true;
             }
