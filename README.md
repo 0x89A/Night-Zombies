@@ -11,7 +11,10 @@
     "Destroy Time": 7.3,
     "Zombie Settings": {
       "Scarecrow Population (total amount)": 50,
-      "Scarecrow Health": 200.0
+      "Scarecrow Health": 200.0,
+      "Scarecrow Kits": [
+        "kitname"
+      ]
     },
     "Chance Settings": {
       "Chance per cycle": 100.0,
