@@ -17,7 +17,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.0")]
+    [Info("Night Zombies", "0x89A", "3.3.1")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -388,10 +388,17 @@ namespace Oxide.Plugins
                 _scarecrow = GetComponent<ScarecrowNPC>();
                 _loot = _scarecrow.LootSpawnSlots;
                 
-                ScarecrowBrain brain = _scarecrow.GetComponent<ScarecrowBrain>();
-                brain.AddStates();
-                brain.states.Remove(AIState.Chase);
-                brain.AddState(new BrainState());
+                InvokeRepeating(AttackTick, 0f, 0.5f);
+            }
+            
+            private void AttackTick()
+            {
+                BaseEntity entity = _scarecrow.Brain.Senses.GetNearestTarget(100);
+
+                if (entity != null && _scarecrow.CanAttack(entity) && Vector3.Distance(entity.transform.position, _scarecrow.transform.position) < 1.5f)
+                {
+                    _scarecrow.StartAttacking(entity);
+                }
             }
 
             private void Respawn()
@@ -508,24 +515,6 @@ namespace Oxide.Plugins
                             }
                         }
                     }
-                }
-            }
-
-            private class BrainState : BaseAIBrain<ScarecrowNPC>.BaseChaseState
-            {
-                public override StateStatus StateThink(float delta)
-                {
-                    base.StateThink(delta);
-                    
-                    BaseEntity entity = brain.Senses.GetNearestTarget(100);
-                    ScarecrowNPC scarecrow = GetEntity();
-                
-                    if (entity != null && scarecrow.CanAttack(entity) && Vector3.Distance(entity.transform.position, scarecrow.transform.position) < 1.5f)
-                    {
-                        scarecrow.StartAttacking(entity);
-                    }
-                    
-                    return StateStatus.Running;
                 }
             }
         }
