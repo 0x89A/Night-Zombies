@@ -17,7 +17,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.1")]
+    [Info("Night Zombies", "0x89A", "3.3.2")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -60,7 +60,7 @@ namespace Oxide.Plugins
             }
             
             //Start time check
-            if (_config.Spawn.spawnTime < 0 && _config.Spawn.destroyTime < 0)
+            if (_config.Spawn.spawnTime >= 0 && _config.Spawn.destroyTime >= 0)
             {
                 timer.Once(5f, () =>
                 {
@@ -72,7 +72,7 @@ namespace Oxide.Plugins
 
         void Unload()
         {
-            if (_config.Spawn.spawnTime < 0 && _config.Spawn.destroyTime < 0)
+            if (_config.Spawn.spawnTime >= 0 && _config.Spawn.destroyTime >= 0)
             {
                 TOD_Sky.Instance.Components.Time.OnMinute -= _spawnController.TimeTick;
                 TOD_Sky.Instance.Components.Time.OnDay -= OnDay;
