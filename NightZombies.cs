@@ -17,7 +17,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.2")]
+    [Info("Night Zombies", "0x89A", "3.3.3")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -252,7 +252,7 @@ namespace Oxide.Plugins
                     entity.SetHealth(health);
 
                     //Give kit
-                    if (_instance._kits)
+                    if (_instance._kits && zombiesConfig.kits.Count > 0)
                     {
                         _instance._kits.Call("GiveKit", entity, zombiesConfig.kits.GetRandom());
                     }
