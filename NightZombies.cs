@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.4")]
+    [Info("Night Zombies", "0x89A", "3.3.5")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
