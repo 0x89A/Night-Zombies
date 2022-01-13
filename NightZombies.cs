@@ -27,6 +27,7 @@ namespace Oxide.Plugins
         private DynamicConfigFile _dataFile;
 
         [PluginReference("Kits")] private Plugin _kits;
+        [PluginReference("DeathNotes")] private Plugin _deathNotes;
         
         private SpawnController _spawnController;
 
@@ -90,12 +91,12 @@ namespace Oxide.Plugins
 
         #region -Oxide Hooks-
 
-        object OnNpcTarget(ScarecrowNPC npc, BaseEntity target)
+        private object OnNpcTarget(ScarecrowNPC npc, BaseEntity target)
         {
             return CanAttack(target);
         }
 
-        object OnTurretTarget(NPCAutoTurret turret, ScarecrowNPC entity)
+        private object OnTurretTarget(NPCAutoTurret turret, ScarecrowNPC entity)
         {
             return !_config.Behaviour.sentriesAttackZombies ? (object)true : null;
         }
@@ -105,6 +106,7 @@ namespace Oxide.Plugins
             if (_spawnController.IsNightZombie(entity))
             {
                 _spawnController.Respawn(entity);
+                _deathNotes.Call("OnEntityDeath", entity as BasePlayer, info);
                 return true;
             }
 
@@ -639,8 +641,8 @@ namespace Oxide.Plugins
         }
         
         #region -Configuration-
-        
-        class Configuration
+
+        private class Configuration
         {
             [JsonProperty("Spawn Settings")]
             public SpawnSettings Spawn = new SpawnSettings();
