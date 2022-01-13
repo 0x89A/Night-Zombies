@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.6")]
+    [Info("Night Zombies", "0x89A", "3.3.7")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -106,7 +106,7 @@ namespace Oxide.Plugins
             if (_spawnController.IsNightZombie(entity))
             {
                 _spawnController.Respawn(entity);
-                _deathNotes.Call("OnEntityDeath", entity as BasePlayer, info);
+                _deathNotes?.Call("OnEntityDeath", entity as BasePlayer, info);
                 return true;
             }
 
