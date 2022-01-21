@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.7")]
+    [Info("Night Zombies", "0x89A", "3.3.8")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -143,6 +143,11 @@ namespace Oxide.Plugins
             return player != null && !player.userID.IsSteamId() && !(target is ScientistNPC) && !(target is ScarecrowNPC);
         }
 
+        public void PlaySound(BaseEntity ent, string sound)
+        {
+            Effect.server.Run(sound, ent, StringPool.Get("head"), Vector3.zero, Vector3.up);
+        }
+        
         #endregion
 
         private class SpawnController
@@ -392,12 +397,14 @@ namespace Oxide.Plugins
             private ScarecrowNPC _scarecrow;
             private LootContainer.LootSpawnSlot[] _loot;
             private BrainState _brainState;
+            private BaseNavigator _navigator;
 
             #region -Init-
 
             private void Awake()
             {
                 _scarecrow = GetComponent<ScarecrowNPC>();
+                _navigator = GetComponent<BaseNavigator>();
                 _loot = _scarecrow.LootSpawnSlots;
             }
 
@@ -406,21 +413,21 @@ namespace Oxide.Plugins
                 _scarecrow.Brain.states.Remove(AIState.Chase);
                 _brainState = new BrainState();
                 _scarecrow.Brain.AddState(_brainState);
+                _scarecrow.Brain.TargetLostRange = 30f;
+                _scarecrow.Brain.SenseRange = 15;
 
                 ItemManager.CreateByItemID(1840822026, 100).MoveToContainer(_scarecrow.inventory.containerBelt, 1);
 
-                InvokeRepeating(() => PlaySound(_scarecrow, _breatheSound), 0f, 9f);
+                InvokeRepeating(() => _instance.PlaySound(_scarecrow, _breatheSound), 0f, 9f);
+                
+                _navigator.ForceToGround();
+                _navigator.PlaceOnNavMesh();
             }
 
             #endregion
 
             #region -Util
 
-            private void PlaySound(BaseEntity ent, string sound)
-            {
-                Effect.server.Run(sound, ent, StringPool.Get("head"), Vector3.zero, Vector3.up);
-            }
-            
             private void Respawn()
             {
                 if (_instance._config.Destroy.leaveCorpseKilled) 
@@ -442,9 +449,13 @@ namespace Oxide.Plugins
                     _scarecrow.AdminKill();
                     return;
                 }
+
+                _scarecrow.Brain.Senses.UpdateKnownPlayersLOS();
                 
                 _scarecrow.Teleport(position);
                 _scarecrow.gameObject.SetActive(true);
+                _navigator.ForceToGround();
+                _navigator.PlaceOnNavMesh();
 
                 _scarecrow.Heal(_instance._config.Spawn.Zombies.health);
                 _scarecrow.metabolism.bleeding.SetValue(0f);
@@ -514,7 +525,8 @@ namespace Oxide.Plugins
                     corpse.playerSteamID = _scarecrow.userID;
 
                     corpse.Spawn();
-                    PlaySound(corpse, _deathSound);
+                    corpse.TakeChildren(_scarecrow);
+                    _instance.PlaySound(corpse, _deathSound);
 
                     //Spawn loot
                     ItemContainer[] containers = corpse.containers;
@@ -578,8 +590,16 @@ namespace Oxide.Plugins
                         if (_scarecrow.CanAttack(target) && distance < 1.5f)
                         {
                             _scarecrow.StartAttacking(target);
+                            
+                            //Play weapon sound
+                            BaseMelee weapon = _scarecrow.GetHeldEntity() as BaseMelee;;
+                            
+                            if (weapon != null && weapon.swingEffect != null && weapon.swingEffect.isValid)
+                            {
+                                _instance.PlaySound(_scarecrow, weapon.swingEffect.resourcePath);
+                            }
                         }
-                        else if (CanThrow(target.transform.position) && !target.isInAir && !target.IsFlying && distance < 5f)
+                        else if (CanThrow(target.transform.position) && target.IsOnGround() && distance < 5f)
                         {
                             //Throw grenade
                             ThrowGrenade(target);
