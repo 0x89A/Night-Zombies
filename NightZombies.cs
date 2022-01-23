@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.8")]
+    [Info("Night Zombies", "0x89A", "3.3.9")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -599,7 +599,7 @@ namespace Oxide.Plugins
                                 _instance.PlaySound(_scarecrow, weapon.swingEffect.resourcePath);
                             }
                         }
-                        else if (CanThrow(target.transform.position) && target.IsOnGround() && distance < 5f)
+                        else if (_instance._config.Behaviour.throwGrenades && CanThrow(target.transform.position) && target.IsOnGround() && distance < 5f)
                         {
                             //Throw grenade
                             ThrowGrenade(target);
@@ -734,7 +734,7 @@ namespace Oxide.Plugins
                 
                 [JsonProperty("Leave Corpse, when killed by player")]
                 public bool leaveCorpseKilled = true;
-                
+
                 [JsonProperty("Half bodybag despawn time")]
                 public bool halfBodybagDespawn = true;
                 
@@ -749,6 +749,9 @@ namespace Oxide.Plugins
 
                 [JsonProperty("Zombies attacked by outpost sentries")]
                 public bool sentriesAttackZombies = true;
+                
+                [JsonProperty("Throw Grenades")]
+                public bool throwGrenades = true;
 
                 [JsonProperty("Ignore Human NPCs")]
                 public bool ignoreHumanNPC = true;
