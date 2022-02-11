@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.9")]
+    [Info("Night Zombies", "0x89A", "3.3.10")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -45,12 +45,12 @@ namespace Oxide.Plugins
 
             try
             {
-                _spawnController.daysSinceLastSpawn = _dataFile.ReadObject<int>();
+                _spawnController.DaysSinceLastSpawn = _dataFile.ReadObject<int>();
             }
             catch //Default to 0 if error reading or data broken
             {
                 PrintWarning("Failed to load saved days since last spawn, defaulting to 0");
-                _spawnController.daysSinceLastSpawn = 0;
+                _spawnController.DaysSinceLastSpawn = 0;
             }
         }
         
@@ -81,12 +81,12 @@ namespace Oxide.Plugins
                 TOD_Sky.Instance.Components.Time.OnDay -= OnDay;
             }
 
-            _dataFile.WriteObject(_spawnController.daysSinceLastSpawn);
+            _dataFile.WriteObject(_spawnController.DaysSinceLastSpawn);
 
             _spawnController?.Shutdown();
         }
 
-        private void OnDay() => _spawnController.daysSinceLastSpawn++;
+        private void OnDay() => _spawnController.DaysSinceLastSpawn++;
 
         #endregion
 
@@ -104,7 +104,7 @@ namespace Oxide.Plugins
 
         private object OnPlayerDeath(ScarecrowNPC entity, HitInfo info)
         {
-            if (_spawnController.IsNightZombie(entity))
+            if (_spawnController.IsNightZombie(entity) && _spawnController.IsSpawnTime)
             {
                 _spawnController.Respawn(entity);
                 _deathNotes?.Call("OnEntityDeath", entity as BasePlayer, info);
@@ -154,18 +154,18 @@ namespace Oxide.Plugins
 
         private class SpawnController
         {
-            private const string prefab = "assets/prefabs/npc/scarecrow/scarecrow.prefab";
+            private const string _prefab = "assets/prefabs/npc/scarecrow/scarecrow.prefab";
 
             private Configuration.SpawnSettings spawnConfig;
             private Configuration.SpawnSettings.ZombieSettings zombiesConfig;
 
             private float spawnTime, destroyTime;
-            private bool isSpawnTime => spawnTime > destroyTime ? Env.time >= spawnTime || Env.time < destroyTime : Env.time <= spawnTime || Env.time > destroyTime;
+            internal bool IsSpawnTime => spawnTime > destroyTime ? Env.time >= spawnTime || Env.time < destroyTime : Env.time <= spawnTime || Env.time > destroyTime;
             private bool isDestroyTime => spawnTime > destroyTime ? Env.time >= destroyTime && Env.time < spawnTime : Env.time <= destroyTime && Env.time > spawnTime;
 
-            public int daysSinceLastSpawn;
-            
-            public Timer spawnTimer;
+            public int DaysSinceLastSpawn;
+
+            private Timer _spawnTimer;
             private bool _spawned = false;
 
             private Dictionary<BaseCombatEntity, NightZombie> zombies = new Dictionary<BaseCombatEntity, NightZombie>();
@@ -188,8 +188,8 @@ namespace Oxide.Plugins
                 
                 if (zombiesConfig.population > 0)
                 {
-                    spawnTimer?.Destroy();
-                    spawnTimer = _instance.timer.Repeat(0.5f, zombiesConfig.population, Spawn);
+                    _spawnTimer?.Destroy();
+                    _spawnTimer = _instance.timer.Repeat(0.5f, zombiesConfig.population, Spawn);
                 }
 
                 if (_instance._config.Broadcast.doBroadcast && !_spawned)
@@ -197,7 +197,7 @@ namespace Oxide.Plugins
                     Broadcast("ChatBroadcast", zombiesConfig.population);
                 }
 
-                daysSinceLastSpawn = 0;
+                DaysSinceLastSpawn = 0;
                 _spawned = true;
             }
 
@@ -236,7 +236,7 @@ namespace Oxide.Plugins
                 else if (zombies.Count > 0 && isDestroyTime && _spawned)
                 {
                     //Stop timer
-                    spawnTimer?.Destroy();
+                    _spawnTimer?.Destroy();
                     
                     ServerMgr.Instance.StartCoroutine(RemoveZombies());
                 }
@@ -251,7 +251,7 @@ namespace Oxide.Plugins
                 BasePlayer player;
                 Vector3 position = spawnConfig.spawnNearPlayers && BasePlayer.activePlayerList.Count >= spawnConfig.minNearPlayers && GetPlayer(out player) ? GetRandomPositionAroundPlayer(player) : GetRandomPosition();
 
-                BasePlayer entity = GameManager.server.CreateEntity(prefab, position, Quaternion.identity, false) as BasePlayer;
+                BasePlayer entity = GameManager.server.CreateEntity(_prefab, position, Quaternion.identity, false) as BasePlayer;
 
                 if (entity)
                 {
@@ -347,7 +347,7 @@ namespace Oxide.Plugins
 
             private bool CanSpawn()
             {
-                return !_spawned && daysSinceLastSpawn >= spawnConfig.Chance.days && Random.Range(0f, 100f) < spawnConfig.Chance.chance && isSpawnTime;
+                return !_spawned && DaysSinceLastSpawn >= spawnConfig.Chance.days && Random.Range(0f, 100f) < spawnConfig.Chance.chance && IsSpawnTime;
             }
 
             private bool IsInObject(Vector3 position)
@@ -383,7 +383,7 @@ namespace Oxide.Plugins
             public void Shutdown()
             {
                 //Stop timer
-                spawnTimer?.Destroy();
+                _spawnTimer?.Destroy();
 
                 ServerMgr.Instance.StartCoroutine(RemoveZombies(true));
             }
