@@ -28,6 +28,7 @@ namespace Oxide.Plugins
 
         [PluginReference("Kits")] private Plugin _kits;
         [PluginReference("DeathNotes")] private Plugin _deathNotes;
+        [PluginReference("Quests")] private Plugin _quests;
         
         private SpawnController _spawnController;
 
@@ -36,7 +37,7 @@ namespace Oxide.Plugins
         void Init()
         {
             _instance = this;
-            
+
             _spawnController = new SpawnController(_config);
             
             //Read saved number of days since last spawn
@@ -107,6 +108,7 @@ namespace Oxide.Plugins
             {
                 _spawnController.Respawn(entity);
                 _deathNotes?.Call("OnEntityDeath", entity as BasePlayer, info);
+                _quests?.Call("OnEntityDeath", entity, info);
                 return true;
             }
 
