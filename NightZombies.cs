@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.10")]
+    [Info("Night Zombies", "0x89A", "3.3.11")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -29,6 +29,8 @@ namespace Oxide.Plugins
         [PluginReference("Kits")] private Plugin _kits;
         [PluginReference("DeathNotes")] private Plugin _deathNotes;
         [PluginReference("Quests")] private Plugin _quests;
+        [PluginReference("XPerience")] private Plugin _xperience;
+        [PluginReference("XPerienceAddon")] private Plugin _xperienceaddon;
         
         private SpawnController _spawnController;
 
@@ -109,6 +111,8 @@ namespace Oxide.Plugins
                 _spawnController.Respawn(entity);
                 _deathNotes?.Call("OnEntityDeath", entity as BasePlayer, info);
                 _quests?.Call("OnEntityDeath", entity, info);
+                _xperience?.Call("OnEntityDeath", entity, info);
+                _xperienceaddon?.Call("OnEntityDeath", entity, info);
                 return true;
             }
 
