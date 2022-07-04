@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.11")]
+    [Info("Night Zombies", "0x89A", "3.3.12")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -424,7 +424,10 @@ namespace Oxide.Plugins
 
                 ItemManager.CreateByItemID(1840822026, 100).MoveToContainer(_scarecrow.inventory.containerBelt, 1);
 
-                InvokeRepeating(() => _instance.PlaySound(_scarecrow, _breatheSound), 0f, 9f);
+                if (_instance._config.Spawn.Zombies.useBreathingSound)
+                {
+                    InvokeRepeating(() => _instance.PlaySound(_scarecrow, _breatheSound), 0f, 9f);
+                }
                 
                 _navigator.ForceToGround();
                 _navigator.PlaceOnNavMesh();
@@ -715,6 +718,9 @@ namespace Oxide.Plugins
                     
                     [JsonProperty("Scarecrow Health")]
                     public float health = 200f;
+
+                    [JsonProperty("Make Breathing Sound")]
+                    public bool useBreathingSound = true;
 
                     [JsonProperty("Scarecrow Kits")]
                     public List<string> kits = new List<string>();
