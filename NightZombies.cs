@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.12")]
+    [Info("Night Zombies", "0x89A", "3.3.13")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -565,7 +565,7 @@ namespace Oxide.Plugins
 
             #region -Brain-
 
-            private class BrainState : BaseAIBrain<ScarecrowNPC>.BaseChaseState
+            private class BrainState : BaseAIBrain.BaseChaseState
             {
                 private ScarecrowNPC _scarecrow;
                 
@@ -575,14 +575,14 @@ namespace Oxide.Plugins
 
                 private Timer _grenadeTimer;
 
-                public override void StateEnter()
+                public override void StateEnter(BaseAIBrain brain, BaseEntity entity)
                 {
-                    base.StateEnter();
+                    base.StateEnter(brain, entity);
                     
-                    _scarecrow = GetEntity();
+                    _scarecrow = entity as ScarecrowNPC;
                 }
 
-                public override StateStatus StateThink(float delta)
+                public override StateStatus StateThink(float delta, BaseAIBrain brain, BaseEntity entity)
                 {
                     BasePlayer target = brain.Senses.GetNearestTarget(brain.SenseRange) as BasePlayer;
 
@@ -616,7 +616,7 @@ namespace Oxide.Plugins
                         }
                     }
                     
-                    base.StateThink(delta);
+                    base.StateThink(delta, brain, entity);
 
                     return StateStatus.Running;
                 }
