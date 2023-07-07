@@ -20,7 +20,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.3.14")]
+    [Info("Night Zombies", "0x89A", "3.3.15")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -396,7 +396,7 @@ namespace Oxide.Plugins
 
             private bool IsInOcean(Vector3 position)
             {
-                return WaterLevel.GetWaterDepth(position) > 0.25f;
+                return WaterLevel.GetWaterDepth(position, true, true) > 0.25f;
             }
 
             private void Broadcast(string key, params object[] values)
