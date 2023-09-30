@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.4.0")]
+    [Info("Night Zombies", "0x89A", "3.4.1")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -37,14 +37,14 @@ namespace Oxide.Plugins
         private Plugin _vanish;
 
         private SpawnController _spawnController;
-
+        
         #region -Init-
         
         private void Init()
         {
             _instance = this;
 
-            _spawnController = new SpawnController(_config);
+            _spawnController = new SpawnController();
             
             //Read saved number of days since last spawn
             _dataFile = Interface.Oxide.DataFileSystem.GetFile("NightZombies-daysSinceSpawn");
@@ -86,11 +86,8 @@ namespace Oxide.Plugins
             //Start time check
             if (!_config.Spawn.AlwaysSpawned && _config.Spawn.SpawnTime >= 0 && _config.Spawn.DestroyTime >= 0)
             {
-                timer.Once(5f, () =>
-                {
-                    TOD_Sky.Instance.Components.Time.OnMinute += _spawnController.TimeTick;
-                    TOD_Sky.Instance.Components.Time.OnDay += OnDay;
-                });
+                TOD_Sky.Instance.Components.Time.OnMinute += _spawnController.TimeTick;
+                TOD_Sky.Instance.Components.Time.OnDay += OnDay;
             }
         }
         
@@ -215,7 +212,7 @@ namespace Oxide.Plugins
             private readonly Configuration.SpawnSettings.ZombieSettings _zombiesConfig;
             
             private readonly int _spawnLayerMask = LayerMask.GetMask("Default", "Tree", "Construction", "World", "Vehicle_Detailed", "Deployed");
-            private readonly WaitForSecondsRealtime _waitHalfSecond = new(0.5f);
+            private readonly WaitForSeconds _waitTenthSecond = new(0.1f);
 
             private bool IsSpawnTime => _spawnConfig.AlwaysSpawned || _spawnTime > _destroyTime
                                             ? Env.time >= _spawnTime || Env.time < _destroyTime
@@ -229,62 +226,76 @@ namespace Oxide.Plugins
             
             private readonly float _spawnTime;
             private readonly float _destroyTime;
+            private readonly bool _leaveCorpse;
             
             private bool _spawned;
+
+            private Coroutine _currentCoroutine;
             
             private readonly List<ScarecrowNPC> _zombies = new();
             
-            public SpawnController(Configuration config)
+            public SpawnController()
             {
-                _spawnConfig = config.Spawn;
-                _zombiesConfig = config.Spawn.Zombies;
+                _spawnConfig = _config.Spawn;
+                _zombiesConfig = _config.Spawn.Zombies;
                 
                 _spawnTime = _spawnConfig.SpawnTime;
                 _destroyTime = _spawnConfig.DestroyTime;
+                
+                // These might not be available after the plugin is unloaded, will cause NRE if trying to access in RemoveZombies
+                _leaveCorpse = _config.Destroy.LeaveCorpse;
             }
 
             private IEnumerator SpawnZombies()
             {
-                if (_zombiesConfig.Population <= 0 || ServerMgr.Instance.IsInvoking(nameof(SpawnZombies)))
+                if (_zombiesConfig.Population <= 0)
                 {
                     yield break;
                 }
                 
-                ServerMgr.Instance.StopCoroutine(nameof(RemoveZombies));
+                if (_currentCoroutine != null)
+                {
+                    ServerMgr.Instance.StopCoroutine(_currentCoroutine);
+                }
+                
+                _spawned = true;
 
                 for (int i = 0; i < _zombiesConfig.Population; i++)
                 {
                     SpawnZombie();
-                    yield return _waitHalfSecond;
+                    yield return _waitTenthSecond;
                 }
-
+                
                 if (_config.Broadcast.DoBroadcast && !_spawned)
                 {
                     Broadcast("ChatBroadcast", _zombiesConfig.Population);
                 }
 
                 DaysSinceLastSpawn = 0;
-                _spawned = true;
+
+                _currentCoroutine = null;
             }
 
-            public IEnumerator RemoveZombies(bool forceAdminKill = false)
+            private IEnumerator RemoveZombies(bool shuttingDown = false)
             {
-                if (_zombies.Count == 0 || ServerMgr.Instance.IsInvoking(nameof(RemoveZombies)))
+                if (_zombies.Count == 0)
                 {
                     yield break;
                 }
 
-                ServerMgr.Instance.StopCoroutine(nameof(SpawnZombies));
-                
-                for (int i = _zombies.Count - 1; i >= 0; i--)
+                if (_currentCoroutine != null)
                 {
-                    ScarecrowNPC zombie = _zombies[i];
+                    ServerMgr.Instance.StopCoroutine(_currentCoroutine);
+                }
+                
+                foreach (ScarecrowNPC zombie in _zombies.ToArray())
+                {
                     if (zombie == null || zombie.IsDestroyed)
                     {
                         continue;
                     }
 
-                    if (_config.Destroy.LeaveCorpse && !forceAdminKill)
+                    if (_leaveCorpse && !shuttingDown)
                     {
                         zombie.Die();
                     }
@@ -293,22 +304,24 @@ namespace Oxide.Plugins
                         zombie.AdminKill();
                     }
 
-                    yield return _waitHalfSecond;
+                    yield return !shuttingDown ? _waitTenthSecond : null;
                 }
 
-                _zombies.Clear();
+                _zombies?.Clear();
                 _spawned = false;
+
+                _currentCoroutine = null;
             }
 
             public void TimeTick()
             {
                 if (CanSpawn())
                 {
-                    ServerMgr.Instance.StartCoroutine(SpawnZombies());
+                    _currentCoroutine = ServerMgr.Instance.StartCoroutine(SpawnZombies());
                 }
                 else if (_zombies.Count > 0 && IsDestroyTime && _spawned)
                 {
-                    ServerMgr.Instance.StartCoroutine(RemoveZombies());
+                    _currentCoroutine = ServerMgr.Instance.StartCoroutine(RemoveZombies());
                 }
             }
 
