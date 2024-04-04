@@ -18,7 +18,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Night Zombies", "0x89A", "3.4.1")]
+    [Info("Night Zombies", "0x89A", "3.4.2")]
     [Description("Spawns and kills zombies at set times")]
     class NightZombies : RustPlugin
     {
@@ -362,7 +362,7 @@ namespace Oxide.Plugins
                 if (zombie.TryGetComponent(out BaseNavigator navigator))
                 {
                     navigator.ForceToGround();
-                    navigator.PlaceOnNavMesh();
+                    navigator.PlaceOnNavMesh(0);
                 }
 
                 //Initialise health
